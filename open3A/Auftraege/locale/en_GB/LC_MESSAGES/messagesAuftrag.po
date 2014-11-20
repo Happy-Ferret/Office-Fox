@@ -1,0 +1,63 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: open3A Aufträge\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: Rainer Furtmeier <Rainer@Furtmeier.IT>\n"
+"Language-Team: ENGLISH <Support@Furtmeier.IT>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Poedit-Language: English\n"
+"X-Poedit-Country: UNITED KINGDOM\n"
+"X-Poedit-SourceCharset: utf-8\n"
+
+msgid "offen"
+msgstr "open"
+
+msgid "bestätigt"
+msgstr "approved"
+
+msgid "geliefert"
+msgstr "delivered"
+
+msgid "berechnet"
+msgstr "billed"
+
+msgid "abgelehnt"
+msgstr "denied"
+
+msgid "Suche als Filter anwenden"
+msgstr "Use search as filter"
+
+msgid "Einstellungen"
+msgstr "Settings"
+
+msgid "&nbsp;"
+msgstr "&nbsp;"
+
+msgid ""
+"neuen Auftrag\n"
+"erstellen"
+msgstr ""
+
+msgid ""
+"Adresse\n"
+"hinzufügen"
+msgstr ""
+
+msgid ""
+"1x-Adresse\n"
+"erstellen"
+msgstr ""
+
+msgid ""
+"multiDruck\n"
+"Liste anzeigen"
+msgstr ""
+"show\n"
+"multiPrint list"
+
+msgid "Settings"
+msgstr ""
+
