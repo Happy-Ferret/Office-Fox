@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class AuftragGUI extends Auftrag implements iGUIHTML2 {
 	public $newDisplayedFields = array();
@@ -53,11 +53,15 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 		$i = 0;
 		foreach($this->getBelegArten() AS $B){
 			if(isset($pSpecData["pluginSpecificCanOnlySeeKalk"]) AND $B != "Kalk") continue;
+			if(isset($pSpecData["pluginSpecificCantCreateR"]) AND $B == "R") continue;
+			if(isset($pSpecData["pluginSpecificCantCreateL"]) AND $B == "L") continue;
+			if(isset($pSpecData["pluginSpecificCantCreateG"]) AND $B == "G") continue;
+			if(isset($pSpecData["pluginSpecificCantCreateA"]) AND $B == "A") continue;
 
 			$_SESSION["BPS"]->setACProperty("type", $B);
 			$tests = new mGRLBMGUI();
 			$tests->addAssocV3("AuftragID", "=", $this->ID);
-
+			
 			$tests->lCV3();
 			$test = $tests->getNextEntry();
 
@@ -71,7 +75,9 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 				$Bu->onclick("Auftrag.createGRLBM('$this->ID','Auftrag','$B');");
 				$Bu->name($test == null ? "1" : "2");
 				$Bu->id($B."Button");
-						
+				
+				Aspect::joinPoint("belegButtons", $this, __METHOD__, array($Bu));
+				
 				if($test == null)
 					$Bu->className("backgroundColor0");
 
@@ -85,82 +91,135 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 			$i++;
 		}
 
-
+		$js = "";
 		if($bps != -1 AND isset($bps["GRLBMID"])){ //Load specific GRLBM
 			$d = new GRLBMGUI($bps["GRLBMID"]);
 			BPS::unsetProperty("AuftragGUI", "GRLBMID");
+			$js .= OnEvent::script("\$j('#".$d->getMyPrefix()."Button').removeClass('backgroundColor3').removeClass('backgroundColor0').addClass('backgroundColor1');");
 		}
 		
 
 		$html = "";
 
-		$ADTab = new HTMLTable(2);#
+		$ADTab = new HTMLTable(2);
 		$ADTab->setTableStyle("width:100%;border:0px;");
 		$ADTab->setColWidth(1, 120);
 		$ADTab->weight("light");
 		
-		$ADTab2 = new HTMLTable(2);#$gui->getOperationsHTML(get_parent_class($this),$this->ID)
+		$ADTab2 = new HTMLTable(2);
 		$ADTab2->setTableStyle("width:100%;border:0px;");
 		$ADTab2->setColWidth(1, 120);
 		$ADTab2->weight("light");
+		
 
 		$anyC = anyC::get("Auftrag", "AdresseID", $this->A("AdresseID"));
 		$AdresseUsed = $anyC->getTotalNum();
 		
+		
 		$confirmMessage = "if(confirm('Achtung: Beim Bearbeiten der Adresse über diesen Knopf geht die Verbindung zur Kundennummer und die USt-IdNr verloren! Die Adressänderung wirkt sich auf alle Belege in diesem Auftrag aus. Fortfahren?'))";
 		$confirmChange = Aspect::joinPoint("changeAdresseConfirm", $this, __METHOD__, array($confirmMessage), $confirmMessage);
 		
+		
 		$ButtonEditAdresse = new Button("Adresse bearbeiten","./images/i2/edit.png", "icon");
 		$ButtonEditAdresse->style("float:right;");
-		if($AdresseUsed == 1) $ButtonEditAdresse->onclick("$confirmChange contentManager.loadFrame('contentRight','Adresse',{$this->A->AdresseID},0,'AdresseGUI;displayMode:auftragsAdresse;AuftragID:$this->ID')");
-		else $ButtonEditAdresse->onclick("alert('Diese Adresse kann nicht bearbeitet werden, da sie in ".($AdresseUsed - 1)." anderen ".($AdresseUsed == 2 ? "Auftrag" : "Aufträgen")." verwendet wird.');");
+		if($AdresseUsed == 1){
+			$ButtonEditAdresse->doBefore("$confirmChange %AFTER");
+			$ButtonEditAdresse->editInPopup("AuftragAdresse", $this->A("AdresseID"));#"contentManager.loadFrame('contentRight','Adresse',{$this->A->AdresseID},0,'AdresseGUI;displayMode:auftragsAdresse;AuftragID:$this->ID')");
+		} else
+			$ButtonEditAdresse->onclick("alert('Diese Adresse kann nicht bearbeitet werden, da sie in ".($AdresseUsed - 1)." anderen ".($AdresseUsed == 2 ? "Auftrag" : "Aufträgen")." verwendet wird.');");
 
 		if(!$this->showButtonEditAdresse)
 			$ButtonEditAdresse = "";
+		
 		
 		$Adresse = new Adresse($this->A("AdresseID"));
 
 		$AspectAdresse = Aspect::joinPoint("adresse", $this, __METHOD__, $Adresse);
 		if($AspectAdresse != null) $Adresse = $AspectAdresse;
 
+		
 		$BKlickTel = "";
 		if(Session::isPluginLoaded("mklickTel")){
 			$BKlickTel = klickTel::getButtonSmall($this->A("AdresseID"));
 			$BKlickTel->style("float:right;margin-right:10px;");
 		}
 		
+		$BA = "";
+		if($this->A("kundennummer") > 0){
+			$AdresseID = Kappendix::getAdresseIDToKundennummer($this->A("kundennummer"));
+			$BA = new Button("Adresse öffnen", "./images/i2/redo.png", "icon");
+			$BA->loadPlugin("contentRight", "Adressen", "", $AdresseID, "{single:'Adresse'}");
+			$BA->style("float:right;margin-right:10px;");
+		}
+		
 		$ADTab->addRow(
 			($this->A("AdresseID") != "0" ? "<div style=\"float:right;\">".$this->alterAdresseButtons()."<br />".$ButtonEditAdresse."</div>$BKlickTel".($this->A("AdresseID") != "0" ? $Adresse : "") : "<div style=\"float:right;\">".$this->alterAdresseButtons()."</div>").
-			($this->showRowKundennummer ? "<div style=\"clear:both;\"><span style=\"color:grey;\">Kundennummer: ". ($this->A->kundennummer > 0 ? AdressenGUI::getContactButton($this->A("kundennummer")).$this->A("kundennummer") : "keine")."</span></div>" : ""));
+			($this->showRowKundennummer ? "<div style=\"clear:both;\"><span style=\"color:grey;\">Kundennummer: ". ($this->A("kundennummer") > 0 ? AdressenGUI::getContactButton($this->A("kundennummer")).$BA.$this->A("kundennummer") : "keine")."</span></div>" : ""));
 		$ADTab->addRowColspan(1, 2);
 		$ADTab->addCellStyle(1, "padding-left:0px;");
+		
+		
+		if(Session::isPluginLoaded("mAdresseNiederlassung") AND $this->A("kundennummer") > 0){
+			$AC = AdresseNiederlassung::get(Kappendix::getAdresseIDToKundennummer($this->A("kundennummer")));
+
+			if($AC->numLoaded() > 0){
+				$options = array("0" => "Keine");
+				
+				while($N = $AC->n())
+					$options[$N->getID()] = $N->A("AdresseNiederlassungPLZ")." ".$N->A("AdresseNiederlassungOrt").($N->A("AdresseNiederlassungStrasse") != "" ? ", ".$N->A("AdresseNiederlassungStrasse")." ".$N->A("AdresseNiederlassungNr") : "");
+				
+				if(!isset($options[$this->A("AuftragAdresseNiederlassungID")]))
+					$options[$this->A("AuftragAdresseNiederlassungID")] = "Unbekannt (wurde evtl. gelöscht)";
+				
+				$I = new HTMLInput("AuftragAdresseNiederlassungID", "select", $this->A("AuftragAdresseNiederlassungID"), $options);
+				$I->activateMultiEdit("Auftrag", $this->getID());
+				
+				$ADTab2->addLV("Filiale:", $I);
+			}
+			
+		}
+		
 		
 		if($this->showRowLieferantennummer)
 			$ADTab2->addLV("LieferantenNr.:", $this->A->lieferantennummer != -2 ? $this->A("lieferantennummer") : "keine");
 		
+		
 		if($this->showRowUStIdNr)
 			$ADTab2->addLV("USt-IdNr/St.Nr.:", "<input type=\"text\" value=\"".$this->A->UStIdNr."\" ".($this->A->kundennummer == -2 ? " class=\"multiEditInput2\" onfocus=\"oldValue = this.value;\" onblur=\"if(oldValue != this.value) saveMultiEditInput('Auftrag','".$this->getID()."','UStIdNr');\" id=\"UStIdNrID".$this->getID()."\" type=\"text\" onkeydown=\"if(event.keyCode == 13) saveMultiEditInput('Auftrag','".$this->getID()."','UStIdNr');\" style=\"width:95%;text-align:left;\"" : "readonly=\"readonly\"")." />");
 
+		
 		if(Session::isPluginLoaded("mProjekt") AND $this->A("kundennummer") > 0){
-			#$ADTab->addRow(array());
-			#$ADTab->addRowClass("backgroundColor0");
-			
 			$O = array("kein Projekt");
 			$AC = anyC::get("Projekt", "ProjektKunde", Kappendix::getAdresseIDToKundennummer($this->A("kundennummer")));
 			while($P = $AC->getNextEntry())
 				$O[$P->getID()] = $P->A("ProjektName");
 			
 			$PI = new HTMLInput("ProjektID", "select", $this->A("ProjektID"), $O);
+			$PI->onchange("if(\$j(this).val() != 0) { \$j('#AuftragProjektEditButton').show(); \$j('#AuftragProjektNewButton').hide(); } else { \$j('#AuftragProjektEditButton').hide(); \$j('#AuftragProjektNewButton').show(); }");
 			$PI->activateMultiEdit("Auftrag", $this->getID());
+			
 			
 			$BNew = new Button("Projekt erstellen", "./images/i2/new.png", "icon");
 			$BNew->style("float:right;margin-top:4px;");
-			#$BNew->rmePCR("Bestellung", "-1", "createFromAuftrag", $this->getID(), "function(transport){ contentManager.loadPlugin('contentRight', 'mBestellung', '', transport.responseText); }");
-			#$BNew->editInPopup("Projekt", -1, "Projekt erstellen", "ProjektGUI;edit:true");
 			$BNew->popup("", "Projekt erstellen", "Projekt", "-1", "newForAuftragPopup", array($this->getID()));
-				
-			$ADTab2->addLV("Projekt:", $BNew.$PI);
+			$BNew->id("AuftragProjektNewButton");
+			if($this->A("ProjektID") != "0")
+				$BNew->style("float:right;margin-top:4px;display:none;");
+			
+			
+			$BEdit = new Button("Projekt bearbeiten", "./images/i2/edit.png", "icon");
+			$BEdit->style("float:right;margin-top:4px;");
+			$BEdit->popup("", "Projekt bearbeiten", "Projekt", "'+\$j('#ProjektIDID".$this->getID()."').val()+'", "editForAuftragPopup", array($this->getID()));
+			$BEdit->id("AuftragProjektEditButton");
+			if($this->A("ProjektID") == "0")
+				$BEdit->style("float:right;margin-top:4px;display:none;");
+			
+			
+			Aspect::joinPoint("alterProjekt", $this, __METHOD__, array($BNew, $BEdit, $PI));
+			
+			$ADTab2->addLV("Projekt:", $BNew.$BEdit.$PI);
 		}
+		
 		
 		if(Session::isPluginLoaded("mBestellung")){
 			if(!Session::isPluginLoaded("mProjekt")){
@@ -186,12 +245,13 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 			$ADTab2->addLV("Bestellung:", $O);
 		}
 		
+		
 		$gui->customize($this->customizer);
 		
 		foreach($this->newDisplayedFields AS $label => $value)
 			$ADTab2->addLV($label, $value);
 
-		$html .= "
+		$html .= "$js
 	<div style=\"min-height:50px;\" id=\"subframe\">".($d != null ? $d->getHTML(-1,0) : "")."</div>";
 
 		$BOP = $gui->getOperationsHTML(get_parent_class($this),$this->ID);
@@ -233,8 +293,8 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 		echo "Adresse übernommen";
 	}
 
-	public function createGRLBM($type, $returnID = false, $belegNummer = false, $referenz = "", $datum = null){
-		echo parent::createGRLBM($type, $returnID, $belegNummer, $referenz, $datum);
+	public function createGRLBM($type, $returnID = false, $belegNummer = false, $referenz = "", $datum = null, $additional = array()){
+		echo parent::createGRLBM($type, $returnID, $belegNummer, $referenz, $datum, $additional);
 	}
 
 	function getGRLBMPDF($copy, $pdf = null, $GRLBMID = null, $printed = false){
@@ -281,24 +341,16 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 		list($k, $v) = $T->getTBs("emailText", $GRLBM->getMyPrefix(), true);
 		$text = isset($k[0]) ? $k[0] : null;
 
-		
-		if($text == null) {
-			if($die) die("error:AuftraegeMessages.E015");
-			else throw new Exception("E-Mail: Textbaustein not found!");
+		if($GRLBM->getMyPrefix() == "M"){
+			$T = new Textbausteine();
+			list($k, $v) = $T->getTBs("emailMahnung".$GRLBM->A("nummer"), "", true);
+			if(isset($k[0]))
+				$text = $k[0];
 		}
 		
-	   /* $T = new Textbaustein($betreff);
-	    #$T->loadMe();
-	    $Subject = $T->A("text");
-	    $Subject = str_replace("{Firmenname}", $Stammdaten->getA()->firmaLang, $Subject);
-	    if($GRLBM->getMyPrefix() != "M")
-			$Subject = str_replace(array("{Rechnungsnummer}","{Belegnummer}"), $GRLBM->A("prefix").$GRLBM->A("nummer"), $Subject);
-		else {
-			$GRLBMOrig = new GRLBM($GRLBM->A("AuftragID"));
-			$Subject = str_replace(array("{Rechnungsnummer}","{Belegnummer}"), $GRLBM->A("prefix").$GRLBMOrig->A("nummer")."/".$GRLBM->A("nummer"), $Subject);
-		}
-	    $Subject = str_replace(array("{Rechnungsdatum}","{Belegdatum}"), $GRLBM->A("datum"), $Subject);
-*/
+		if($text == null)
+			$text = -1;
+		
 	    $replace = array(
 			"{Firmenname}",
 			"{Benutzername}",
@@ -349,12 +401,6 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 				$Body = str_replace("{+{$mv}Tage}", Util::CLDateParser($date + $mv * 3600 * 24), $Body);
 			
 		
-		
-		$Subject = str_ireplace($replace, $replaceWith, $Subject);		
-	    $Body    = str_ireplace($replace, $replaceWith, $Body);
-		
-		#$Body = str_replace("{Benutzername}",Session::currentUser()->A("name"), $Body);
-	    #$Body = str_replace("{Anrede}", Util::formatAnrede("de_DE", $A), $Body);
 	    if($GRLBM->getMyPrefix() != "M"){
 			$Subject = str_ireplace(array("{Rechnungsnummer}", "{Belegnummer}"), $GRLBM->A("prefix").$GRLBM->A("nummer"), $Subject);
 			$Body    = str_ireplace(array("{Rechnungsnummer}", "{Belegnummer}"), $GRLBM->A("prefix").$GRLBM->A("nummer"), $Body);
@@ -364,8 +410,44 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 			$Subject = str_ireplace("{Rechnungsnummer}", $GRLBMOrig->A("prefix").$GRLBMOrig->A("nummer"), $Subject);
 			$Body    = str_ireplace("{Rechnungsnummer}", $GRLBMOrig->A("prefix").$GRLBMOrig->A("nummer"), $Body);
 			
+			$replaceWith[3] = $GRLBMOrig->A("datum");
+			
+			if($GRLBMOrig->A("nummer") > 1){
+				$AC = anyC::get("GRLBM", "isM", "1");
+				$AC->addAssocV3("AuftragID", "=", $GRLBM->A("AuftragID"));
+				$AC->addAssocV3("nummer", "=", "1");
+				$M1 = $AC->n();
+				if($M1){
+					$Subject = str_ireplace("{1.Mahnungsdatum}", Util::CLDateParser($M1->A("datum")), $Subject);
+					$Body    = str_ireplace("{1.Mahnungsdatum}", Util::CLDateParser($M1->A("datum")), $Body);
+				}
+			}
+			
+			if($GRLBMOrig->A("nummer") > 2){
+				$AC = anyC::get("GRLBM", "isM", "1");
+				$AC->addAssocV3("AuftragID", "=", $GRLBM->A("AuftragID"));
+				$AC->addAssocV3("nummer", "=", "2");
+				$M2 = $AC->n();
+				if($M2){
+					$Subject = str_ireplace("{2.Mahnungsdatum}", Util::CLDateParser($M2->A("datum")), $Subject);
+					$Body    = str_ireplace("{2.Mahnungsdatum}", Util::CLDateParser($M2->A("datum")), $Body);
+				}
+			}
+			
+			
 			$Subject = str_ireplace("{Belegnummer}", $GRLBM->A("prefix").$GRLBMOrig->A("nummer")."/".$GRLBM->A("nummer"), $Subject);
 			$Body    = str_ireplace("{Belegnummer}", $GRLBM->A("prefix").$GRLBMOrig->A("nummer")."/".$GRLBM->A("nummer"), $Body);
+		}
+		
+		$Subject = str_ireplace($replace, $replaceWith, $Subject);		
+	    $Body    = str_ireplace($replace, $replaceWith, $Body);
+		
+		
+		if(Session::isPluginLoaded("mMicropayment")){
+			$Body = Micropayment::replace(
+				$Body, "Rechnung ".$GRLBM->A("prefix").$GRLBM->A("nummer"),
+				$GRLBM->A("bruttobetrag") * 100,
+				"Gesamt-Betrag gem. Rechnung ".$GRLBM->A("prefix").$GRLBM->A("nummer"));
 		}
 		
 		#$Subject = str_replace(array("{Rechnungsdatum}","{Belegdatum}"), $GRLBM->A("datum"), $Subject);
@@ -373,6 +455,7 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 	    
 		
 		$Subject = Aspect::joinPoint("alterSubject", null, __METHOD__, array($A, $Subject), $Subject);
+		$Body = Aspect::joinPoint("alterBody", null, __METHOD__, array($A, $Body, $Stammdaten), $Body);
 		
 		return array($Subject, $Body);
 	}
@@ -441,54 +524,103 @@ class AuftragGUI extends Auftrag implements iGUIHTML2 {
 		foreach($Recipients AS $k => $R)
 			$Empfaenger[$k] = $R[0]." <$R[1]>";
 		
+		$Empfaenger[-1] = "Anderer Empfänger";
+		
 		$IR = new HTMLInput("EMailRecipientSelection", "select", $AnsprechpartnerID, $Empfaenger);
-		$IR->onchange("Auftrag.windowMail(".$this->getID().", '$GRLBMID', '$sendVia', this.value);");
-		if(count($Empfaenger) == 1)
-			$IR = $Empfaenger[0];
+		$IR->onchange("if(this.value != '-1') Auftrag.windowMail(".$this->getID().", '$GRLBMID', '$sendVia', this.value); else { \$j('[name=otherRecipient]').show(); \$j('#regularRecipient').hide(); }");
+		#if(count($Empfaenger) == 1)
+		#	$IR = $Empfaenger[0];
 		
 		$Stammdaten = mStammdaten::getActiveStammdaten();
 		list($Subject, $Body) = AuftragGUI::getEMailTBs($AnAdresse, $Stammdaten, $G);
 		list($fromName, $from) = AuftragGUI::getEMailSender($Stammdaten);
 		$recipient = $Recipients[$AnsprechpartnerID][1];
 		
+		$IO = new HTMLInput("otherRecipient", "text");
+		$IO->style("display:none;margin-top:5px;");
+		$IO->placeholder("E-Mail-Adresse");
+		#$Recipients[-1] = array("", "", $IO);
+		
 		$tab = new HTMLTable(2);
 		$tab->setColWidth(1, "120px;");
 		$tab->addLV("Absender:", "$fromName &lt;$from&gt;");
-		$tab->addLV("Empfänger:", $IR."<br /><small style=\"color:grey;\">$recipient<br />".$Recipients[$AnsprechpartnerID][2]."</small>");
+		$tab->addLV("Empfänger:", $IR."<br />$IO<div id=\"regularRecipient\"><small style=\"color:grey;\">$recipient<br />".$Recipients[$AnsprechpartnerID][2]."</small></div>");
 		$ud = new mUserdata();
 		if($_SESSION["S"]->getCurrentUser()->A("UserEmail") != "" AND $ud->getUDValue("BCCToUser", "false") == "true")
 			$tab->addLV("BCC:",$_SESSION["S"]->getCurrentUser()->A("UserEmail"));
 
 		$tab->addLV("Betreff:", "<input type=\"text\" id=\"EMailSubject$this->ID\" value=\"$Subject\" />");
 		
-		$tab->addRow(array("<textarea id=\"EMailBody$this->ID\" style=\"width:100%;height:300px;font-size:10px;\">$Body</textarea>"));
+		$tab->addRow(array("<textarea class=\"tinyMCEEditor\" id=\"EMailBody$this->ID\" style=\"width:100%;height:300px;font-size:10px;\">$Body</textarea>"));
 		$tab->addRowColspan(1, 2);
 		$tab->addRowClass("backgroundColor0");
 
 		$BAbort = new Button("Abbrechen","stop");
-		$BAbort->onclick("Popup.close('$this->ID', 'EMailPreview');");
+		$BAbort->onclick(OnEvent::closePopup("Auftrag"));
 
 		$BGo = new Button("E-Mail\nsenden","okCatch");
 		$BGo->style("float:right;");
 		if($sendVia == "E-Mail")
-			$BGo->onclick((strpos($Body, "<p") !== false ? "nicEditors.findEditor('EMailBody$this->ID').saveContent();" : "")." Auftrag.directMail('$this->ID', $GRLBMID, '$recipient', $('EMailSubject$this->ID').value, $('EMailBody$this->ID').value); Popup.close('$this->ID', 'EMailPreview');");
+			$BGo->onclick((strpos($Body, "<p") !== false ? "\$j('#EMailBody$this->ID').val(tinyMCE.get('EMailBody$this->ID').getContent());" : "")." Auftrag.directMail('$this->ID', $GRLBMID, '$recipient', $('EMailSubject$this->ID').value, \$j('#EMailBody$this->ID').val(), \$j('#mailAttachments input:checked').serialize(), \$j('[name=otherRecipient]').val()); ".OnEvent::closePopup("Auftrag"));
 		if($sendVia == "sign")
-			$BGo->onclick((strpos($Body, "<p") !== false ? "nicEditors.findEditor('EMailBody$this->ID').saveContent();" : "")." Auftrag.plSign('$this->ID', $GRLBMID, '$recipient', $('EMailSubject$this->ID').value, $('EMailBody$this->ID').value); Popup.close('$this->ID', 'EMailPreview');");
+			$BGo->onclick((strpos($Body, "<p") !== false ? "\$j('#EMailBody$this->ID').val(tinyMCE.get('EMailBody$this->ID').getContent());" : "")." Auftrag.plSign('$this->ID', $GRLBMID, '$recipient', $('EMailSubject$this->ID').value, \$j('#EMailBody$this->ID').val(), \$j('[name=otherRecipient]').val()); ".OnEvent::closePopup("Auftrag"));
 
 		$tab->addRow(array($BGo.$BAbort));
 		$tab->addRowColspan(1, 2);
 
-		echo $tab;
+		echo "<div style=\"width:400px;display:inline-block;vertical-align:top;\">$tab</div>";
 		
 		if(strpos($Body, "<p") !== false)
 			echo OnEvent::script("
 				setTimeout(function(){
-			new nicEditor({
-				iconsPath : './libraries/nicEdit/nicEditorIconsTiny.gif',
-				buttonList : ['bold','italic','underline'],
-				maxHeight : 400
+				".tinyMCEGUI::editorMail ("EMailBody$this->ID", null, "undo redo | pastetext | bold italic underline | fullscreen code")."
+			}, 100);");
+		
+		
+		
+		$T = new HTMLTable(3, "Anhänge");
+		$T->setTableID("mailAttachments");
+		$T->weight("light");
+		$T->setColWidth(1, 20);
+		$T->setColWidth(3, 20);
+		$T->maxHeight(400);
+		$B = new Button("PDF", "./images/i2/pdf.gif", "icon");
+		$G = new GRLBM($GRLBMID);
+		$T->addRow(array($B, $G->A("prefix").$G->A("nummer")));
+		
+		if($sendVia == "E-Mail"){
+			$AC = anyC::get("GRLBM", "AuftragID", $this->getID());
+			$AC->addAssocV3("GRLBMID", "!=", $GRLBMID);
+			$AC->addAssocV3("isM", "=", "0");
+			while($G = $AC->n()){
+				$I = new HTMLInput("attach_".$G->getID(), "checkbox", 0);
 
-			}).panelInstance('EMailBody$this->ID');}, 100);");
+				$T->addRow(array($B, $G->A("prefix").$G->A("nummer"), $I));
+			}
+		}
+		
+    	if($sendVia == "E-Mail" AND Session::isPluginLoaded("mFile") AND mUserdata::getUDValueS("sendBelegViaEmailAttachments", "false") == "true"){
+			$B = new Button("Datei", "./plugins/Files/File18.png", "icon");
+			$D = new mDateiGUI();
+			$D->addAssocV3("DateiClassID", "=", $GRLBMID);
+			$D->addAssocV3("DateiClass", "=", "GRLBM");
+
+			while($f = $D->getNextEntry())
+				$T->addRow(array($B, basename($f->A("DateiPath")), ""));
+			
+			$attachmentsDir = FileStorage::getFilesDir()."GRLBMID".str_pad($GRLBMID, 4, "0", STR_PAD_LEFT);
+			if(file_exists($attachmentsDir)){
+				$dir = new DirectoryIterator($attachmentsDir);
+				foreach ($dir as $file) {
+					if($file->isDot()) continue;
+					if($file->isDir()) continue;
+
+					$T->addRow(array($B, $file->getFilename(), ""));
+				}
+			}
+    	}
+		
+		echo "<div style=\"width:195px;display:inline-block;vertical-align:top;\">$T</div>";
 	}
 	
 	static function getNextNumber($t){

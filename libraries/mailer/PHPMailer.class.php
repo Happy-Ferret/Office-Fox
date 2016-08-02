@@ -381,7 +381,6 @@ class PHPMailer {
 				
 				$this->Host = $MailServer->A("server");
 				
-				
 				$this->SMTPAuth = $MailServer->A("benutzername") != "";
 				$this->Username = $MailServer->A("benutzername");
 				$this->Password = $MailServer->A("passwort");
@@ -934,7 +933,7 @@ class PHPMailer {
 					$hello = ($this->Helo != '' ? $this->Helo : $this->ServerHostname());
 					$this->smtp->Hello($hello);
 
-					if ($tls) {
+					if ($tls OR $this->smtp->useStarttls) {
 						if (!$this->smtp->StartTLS()) {
 							throw new phpmailerException($this->Lang('tls'));
 						}

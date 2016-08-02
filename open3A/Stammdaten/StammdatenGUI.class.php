@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 	public $fieldsBank = array(
@@ -41,6 +41,10 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 		} catch (TableDoesNotExistException $e){
 			
 		}
+		
+		$bps = $this->getMyBPSData();
+		if($bps != -1 AND isset($bps["overwrite"]))
+			self::$locked = false;
 	}
 	
 	function getHTML($id){
@@ -58,6 +62,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 		$FB2 = new FileBrowser();
 		$FB2->addDir("../open3A/Auftraege/");
 		$FB2->addDir("../specifics/");
+		$FB2->addDir(FileStorage::getFilesDir());
 		$FB2->setDefaultConstructorParameter("-1");
 		$a2 = array_flip($FB2->getAsLabeledArray("iReNr",".class.php",true));
 		
@@ -73,7 +78,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 			#"template",
 			"ownTemplate",
 			"ownTemplatePrint",
-			"ownTemplateEmail",
+			"ownTemplateEmailNew",
 			"templateReNr",
 			"firmaKurz",
 			"firmaLang",
@@ -82,6 +87,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 			"inhaber",
 			"geschaeftsfuehrer",
 			"ustidnr",
+			"steuernummer",
 			"amtsgericht",
 			"handelsregister",
 			"strasse",
@@ -112,24 +118,29 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 		$gui->label("inhaber","Inhaber");
 		$gui->label("amtsgericht","Amtsgericht");
 		$gui->label("handelsregister","Handelsregister");
-		$gui->label("ustidnr","USt-IdNr/St.Nr.");
+		$gui->label("ustidnr","USt-IdNr");
 		$gui->label("strasse","Straße");
 		$gui->label("geschaeftsfuehrer","Geschäftsführer");
 		$gui->label("templateReNr","Nummern");
-		$gui->label("ownTemplate","Vorlage");
-		$gui->label("ownTemplatePrint","Vorlage");
+		$gui->label("ownTemplate","Vorlage PDF");
+		$gui->label("ownTemplatePrint","Vorlage Druck");
+		$gui->label("ownTemplateEmailNew","Vorlage E-Mail");
+		$gui->label("steuernummer", "Steuernummer");
 		
 		
 		$gui->type("ownTemplate","select", $a);
-		$gui->descriptionField("ownTemplate","für PDF-Ausgabe und E-Mail");
+		$gui->descriptionField("ownTemplate","für PDF-Ausgabe");
 		
-		$gui->type("ownTemplatePrint","select", $a);
+		$gui->type("ownTemplatePrint","select", array_merge(array("" => "Wie PDF-Ausgabe"), $a));
 		$gui->descriptionField("ownTemplatePrint","für direkt-Druck");
+		
+		$gui->type("ownTemplateEmailNew","select", array_merge(array("" => "Wie PDF-Ausgabe"), $a));
+		$gui->descriptionField("ownTemplateEmailNew","für E-Mail-Versand");
 		
 		if(!$_SESSION["S"]->checkForPlugin("mDrucker"))
 			$gui->type("ownTemplatePrint", "hidden");
 		
-		$gui->type("ownTemplateEmail","hidden");
+		#$gui->type("ownTemplateEmail","hidden");
 		$gui->descriptionField("geschaeftsfuehrer","Bitte geben Sie einen Inhaber <b>oder</b> Geschäftsführer ein");
 		$gui->descriptionField("inhaber","Bitte geben Sie einen Inhaber <b>oder</b> Geschäftsführer ein");
 
@@ -188,7 +199,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 			$B->style("float:right;margin-left:10px;");
 			$B->onclick("contentManager.rmePCR('Stammdaten', '".$this->getID()."', 'cloneMe', [''], function(transport){ lastLoadedLeft = (transport.responseText == '' ? -1 : transport.responseText); contentManager.reloadFrameLeft(); contentManager.reloadFrameRight(); }, '', true );");
 			
-			$TL->addRow(array("{$B}Diese Stammdaten können nicht mehr bearbeitet werden, da sie in mehr als 10 Aufträgen verwendet werden. Bitte kopieren Sie diese Stammdaten, um Änderungen vorzunehmen."));
+			$TL->addRow(array("{$B}Diese Stammdaten können nicht mehr bearbeitet werden, da sie in mehr als 10 Aufträgen verwendet werden. Bitte kopieren Sie diese Stammdaten, um Änderungen vorzunehmen.<a href=\"#\" onclick=\"".OnEvent::frame("Left", "Stammdaten", $this->getID(), 0, "", "StammdatenGUI;overwrite:true")."return false;\" class=\"hiddenLink\">&nbsp;</a>"));
 			$TL->addRowClass("highlight");
 		} else {
 			$BN = new Button("", "notice", "icon");
@@ -255,9 +266,9 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 		$B->onclick("contentManager.rmePCR('Stammdaten', '".$this->getID()."', 'saveNumbers', encodeURIComponent(JSON.stringify(contentManager.formContent('belegNext'))) , function(transport){ ".OnEvent::closePopup("Stammdaten")." });");
 		
 		
-		echo "<div style=\"width:399px;float:right;border-left-style:solid;border-left-width:1px;margin-left:0px;\" class=\"borderColor1\">$F$B</div>";
+		echo "<div style=\"width:770px;\"><div style=\"width:379px;float:right;border-left-style:solid;border-left-width:1px;margin-left:0px;\" class=\"borderColor1\">$F$B</div>";
 		
-		echo "<div style=\"width:400px;height:350px;border-right-style:solid;border-right-width:1px;\" class=\"borderColor1\">";
+		echo "<div style=\"width:390px;height:350px;border-right-style:solid;border-right-width:1px;\" class=\"borderColor1\">";
 		
 		$T = new HTMLTable(2, "Format");
 		$T->weight("light");
@@ -286,7 +297,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 		
 		
 		
-		echo "</div>";
+		echo "</div></div>";
 		
 		echo "<div style=\"clear:both;\"></div>";
 	}
@@ -294,6 +305,7 @@ class StammdatenGUI extends Stammdaten implements iGUIHTML2 {
 	function saveNumbers($data){
 		$data = json_decode($data);
 		$useID = $this->A("templateReNr") == "BelegnummernEditor2";
+		print_r($data);
 		
 		foreach($data AS $e){
 			if($e->name == "belegNummerFormatR")

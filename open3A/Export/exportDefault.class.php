@@ -15,33 +15,37 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 abstract class exportDefault implements iGUIHTML2 {
 	protected $filename;
 	protected $lineEnding = "\n";
+	protected $hidden = array();
+	protected $currentI = 0;
+	protected $currentCollection = null;
 	
 	public function getHTML($id){
 		$T = new HTMLTable(1, $this->getLabel());
 
 		$BCSV = new Button("CSV","export");
-		$BCSV->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", "CSVExport");
+		$BCSV->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", array("'CSVExport'", "\$j('#exportSubset [name=start]').length ? \$j('#exportSubset [name=start]').val() : ''", "\$j('#exportSubset [name=anzahl]').length ? \$j('#exportSubset [name=anzahl]').val() : ''", "\$j('#exportSubset [name=CK1]').length ? \$j('#exportSubset [name=CK1]').val() : ''"));
 		$BCSV->style("float:right;");
 
-		$BXML = new Button("XML","export");
-		$BXML->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", "XML");
+		#$BXML = new Button("XML","export");
+		#$BXML->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", array("'XML'", "\$j('#exportSubset [name=start]').length ? \$j('#exportSubset [name=start]').val() : ''", "\$j('#exportSubset [name=anzahl]').length ? \$j('#exportSubset [name=anzahl]').val() : ''"));
 
-		$T->addRow($BCSV.$BXML);
+		$BXLS = new Button("Excel","./open3A/Export/excelExport.png");
+		$BXLS->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", array("'ExcelExport'", "\$j('#exportSubset [name=start]').length ? \$j('#exportSubset [name=start]').val() : ''", "\$j('#exportSubset [name=anzahl]').length ? \$j('#exportSubset [name=anzahl]').val() : ''", "\$j('#exportSubset [name=CK1]').length ? \$j('#exportSubset [name=CK1]').val() : ''"));
+		$BXLS->style("");
+
+		
+		$T->addRow($BCSV.$BXLS);
 
 
 		$BHTML = new Button("HTML","export");
-		$BHTML->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", "HTMLTable");
+		$BHTML->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", array("'HTMLTable'", "\$j('#exportSubset [name=start]').length ? \$j('#exportSubset [name=start]').val() : ''", "\$j('#exportSubset [name=anzahl]').length ? \$j('#exportSubset [name=anzahl]').val() : ''", "\$j('#exportSubset [name=CK1]').length ? \$j('#exportSubset [name=CK1]').val() : ''"));
 
-		$BXLS = new Button("Excel","./open3A/Export/excelExport.png");
-		$BXLS->windowRme(str_replace("GUI", "",get_class($this)), "", "getExportData", "ExcelExport");
-		$BXLS->style("float:right;");
-
-		$T->addRow($BXLS.$BHTML);
+		$T->addRow($BHTML);
 
 		return $T;
 	}
@@ -50,9 +54,11 @@ abstract class exportDefault implements iGUIHTML2 {
 
 	protected abstract function entryParser(PersistentObject $entry);
 
-	public function getExportData($type){
-		$C = $this->getExportCollection();
-
+	public function getExportData($type, $start, $count, $CK1){
+		$C = $this->getExportCollection($start, $count, $CK1);
+		$this->currentCollection = $C;
+		$this->currentI = 0;
+		
 		while($t = $C->getNextEntry())
 			$this->entryParser($t);
 		
@@ -75,7 +81,10 @@ abstract class exportDefault implements iGUIHTML2 {
 
 				while($t = $C->getNextEntry()){
 					$A = $t->getA();
-
+					$AO = clone $A;
+					foreach($this->hidden AS $h)
+						unset($A->$h);
+					
 					if($UT == null){
 						$fields = PMReflector::getAttributesArrayAnyObject($A);
 						$ID = get_class($t)."ID";
@@ -95,11 +104,15 @@ abstract class exportDefault implements iGUIHTML2 {
 					}
 
 
+					$this->parserBefore($UT, $AO);
 					$UT->addRow($A);
+					$this->parserAfter($UT, $AO);
+					
+					$this->currentI++;
 				}
 
 				if($type == "HTMLTable")
-					echo Util::getBasicHTML($UT->getAs($type), "HTML-Export");
+					echo Util::getBasicHTML($UT != null ? $UT->getAs($type) : "<p>Keine Daten</p>", "HTML-Export");
 
 				if($type == "CSVExport"){
 					$UT->setCSVNewline($this->lineEnding);
@@ -111,6 +124,14 @@ abstract class exportDefault implements iGUIHTML2 {
 			break;
 		}
 
+	}
+	
+	protected function parserAfter($T, $A){
+		
+	}
+	
+	protected function parserBefore($T, $A){
+		
 	}
 }
 ?>

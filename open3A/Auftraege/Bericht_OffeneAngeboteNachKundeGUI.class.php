@@ -15,10 +15,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBerichtDescriptor {
+	protected $status = "open";
+	protected $typ = "A";
 	function __construct() {
  		parent::__construct();
 
@@ -26,8 +28,8 @@ class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBer
  		if(!Session::isPluginLoaded("Auftraege")) return;
  		
  		
- 		$ac = anyC::get("Auftrag", "status", "open");
- 		$ac->addAssocV3("isA","=","1");
+ 		$ac = anyC::get("Auftrag", "status", $this->status);
+ 		$ac->addAssocV3("is".$this->typ,"=","1");
  		#$ac->addAssocV3("isG","=","1","OR","2");
 		$ac->addOrderV3("datum","ASC");
 		$ac->addOrderV3("nummer","ASC");
@@ -44,6 +46,7 @@ class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBer
 			"steuern AS USt",
 			"nettobetrag AS Netto",
 			"firma",
+			"beschreibung",
 			#"isA",
 			#"isAbschlussrechnung",
 			"t1.AuftragID",
@@ -51,7 +54,7 @@ class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBer
 			#"GRLBMpayedVia",
 			#"isPayed",
 			"t2.GRLBMID",
-			"IF(isA='1', 'A','') AS belegTyp",
+			"IF(is".$this->typ."='1', '$this->typ','') AS belegTyp",
 			"CONCAT(IF(firma='',CONCAT(vorname,' ', nachname),firma),'\n',strasse,' ',nr,'\n',plz,' ',ort) AS Name",
 			"IF(kundennummer > 0, kundennummer, '') AS kundennummer"));
 		
@@ -99,7 +102,7 @@ class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBer
 		
  		$this->setPageBreakMargin(260);
  		
- 		$this->setHeader("Offene Angebote nach Kunde vom ".Util::CLDateParser(time()));
+ 		$this->setHeader($this->getLabel()." vom ".Util::CLDateParser(time()));
 
  		return parent::getPDF($save);
  	}
@@ -117,10 +120,12 @@ class Bericht_OffeneAngeboteNachKundeGUI extends Bericht_default implements iBer
 				$fpdf->AddPage ();
 			
 			$fpdf->Cell8(20, 4.5, "");
-			$fpdf->Cell8(25, 4.5, substr($P->A("name"), 0, 23));
+			$fpdf->Cell8(25, 4.5, mb_substr($P->A("name"), 0, 18));
 			$fpdf->Cell(20, 4.5, Util::PDFCurrencyParser($P->A("preis") * $P->A("menge")), "", 0, "R");
 			$fpdf->Cell(20, 4.5, Util::PDFCurrencyParser(($P->A("bruttopreis") - $P->A("preis")) * $P->A("menge")), "", 0, "R");
-			$fpdf->Cell(20, 4.5, Util::PDFCurrencyParser($P->A("bruttopreis") * $P->A("menge")), "", 1, "R");
+			$fpdf->Cell(20, 4.5, Util::PDFCurrencyParser($P->A("bruttopreis") * $P->A("menge")), "", 0, "R");
+			$ex = explode("\n", $P->A("beschreibung"));
+			$fpdf->Cell8(0, 4.5, mb_substr($ex[0], 0, 50).(mb_strlen($ex[0]) > 50 ? "..." : ""), "", 1);
 		}
 		if($AC->numLoaded() == 0){
 			$fpdf->Cell8(20, 4.5, "");

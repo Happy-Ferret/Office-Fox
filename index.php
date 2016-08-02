@@ -15,13 +15,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
-if(!function_exists("array_replace")){
+if(!function_exists("hex2bin")){
 	require_once "./system/basics.php";
 	
-	emoFatalError("I'm sorry, but your PHP version is too old.", "You need at least PHP version 5.3.0 to run this program.<br />You are using ".phpversion().". Please talk to your provider about this.", "phynx");
+	emoFatalError("I'm sorry, but your PHP version is too old.", "You need at least PHP version 5.4.0 to run this program.<br />You are using ".phpversion().". Please talk to your provider about this.", "phynx");
 }
 
 $dir = new DirectoryIterator(dirname(__FILE__));
@@ -139,13 +139,11 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 <html>
 	<head>
 		<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
-		<meta name="revisit-after" content="14 days" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
 		<title><?php echo $title ?></title>
 
 		<link rel="shortcut icon" href="<?php echo $favico ?>" /> 
 		
-		<!--<script src="https://login.persona.org/include.js"></script>-->
 		<script type="text/javascript">
 			window.paceOptions = {
 				ajax: {
@@ -175,52 +173,61 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 		<script type="text/javascript" src="./libraries/webtoolkit.base64.js"></script>
 		<script type="text/javascript" src="./libraries/webtoolkit.sha1.js"></script>
 		<script type="text/javascript" src="./libraries/flot/jquery.flot.js"></script>
-		<script type="text/javascript" src="./libraries/flot/jquery.flot.time.js"></script>
-		<script type="text/javascript" src="./libraries/flot/jquery.flot.threshold.js"></script>
-		<script type="text/javascript" src="./libraries/flot/jquery.flot.pie.js"></script>
-		<script type="text/javascript" src="./libraries/flot/jquery.flot.selection.js"></script>
-		<script type="text/javascript" src="./libraries/flot/jquery.flot.orderBars.js"></script>
-		<script type="text/javascript" src="./libraries/nicEdit/nicEdit.js"></script>
+		<script type="text/javascript" src="./libraries/flot/jquery.flot.time.js" async></script>
+		<script type="text/javascript" src="./libraries/flot/jquery.flot.threshold.js" async></script>
+		<script type="text/javascript" src="./libraries/flot/jquery.flot.pie.js" async></script>
+		<script type="text/javascript" src="./libraries/flot/jquery.flot.selection.js" async></script>
+		<script type="text/javascript" src="./libraries/flot/jquery.flot.orderBars.js" async></script>
+		<!--<script type="text/javascript" src="./libraries/nicEdit/nicEdit.js"></script>-->
 		<script type="text/javascript" src="./libraries/modernizr.custom.js"></script>
 		<script type="text/javascript" src="./libraries/snap.svg/snap.svg-min.js"></script>
 		<script type="text/javascript" src="./libraries/touchy/Touchy.js"></script>
 		<script type="text/javascript" src="./libraries/iconic/iconic.min.js"></script>
-		<script type="text/javascript" src="./libraries/tinymce/tinymce.min.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./libraries/tinymce/jquery.tinymce.min.js?r=<?php echo $build; ?>"></script>
+		<script type="text/javascript" src="./libraries/tinymce/tinymce.min.js?r=<?php echo $build; ?>" async></script>
+		<script type="text/javascript" src="./libraries/tinymce/jquery.tinymce.min.js?r=<?php echo $build; ?>" async></script>
 		
 		
 		<script type="text/javascript" src="./javascript/P2J.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/Registry.js?r=<?php echo $build; ?>"></script>
 
 		<script type="text/javascript" src="./javascript/Aspect.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./javascript/Observer.js?r=<?php echo $build; ?>"></script>
+		<!--<script type="text/javascript" src="./javascript/Observer.js?r=<?php echo $build; ?>"></script>-->
 		<script type="text/javascript" src="./javascript/Overlay.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/Menu.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./javascript/autoComplete.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./javascript/phynxContextMenu.js?r=<?php echo $build; ?>"></script>
+		<script type="text/javascript" src="./javascript/autoComplete.js?r=<?php echo $build; ?>" async></script>
+		<script type="text/javascript" src="./javascript/phynxContextMenu.js?r=<?php echo $build; ?>" async></script>
 		<script type="text/javascript" src="./javascript/userControl.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/Interface.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/Popup.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/contentManager.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./javascript/DesktopLink.js?r=<?php echo $build; ?>"></script>
+		<!--<script type="text/javascript" src="./javascript/DesktopLink.js?r=<?php echo $build; ?>"></script>-->
 		<script type="text/javascript" src="./javascript/notificationArea.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/handler.js?r=<?php echo $build; ?>"></script>
 		<script type="text/javascript" src="./javascript/Util.js?r=<?php echo $build; ?>"></script>
 
-		<script type="text/javascript" src="./libraries/TextEditor.js?r=<?php echo $build; ?>"></script>
-		<script type="text/javascript" src="./libraries/fileuploader.js?r=<?php echo $build; ?>"></script>
+		<script type="text/javascript" src="./libraries/TextEditor.js?r=<?php echo $build; ?>" async></script>
+		<script type="text/javascript" src="./libraries/fileuploader.js?r=<?php echo $build; ?>" async></script>
 
 		<script type="text/javascript">
 			if(typeof contentManager == "undefined")
 				alert("Die JavaScript-Dateien konnten nicht geladen werden.\nDies kann an der Server-Konfiguration liegen.\nBitte versuchen Sie, diese Anwendung in ein Unterverzeichnis zu installieren.");
 		</script>
 		<script>
-			window.define = function(factory) {
+			/*window.define = function(factory) {
 				try{ delete window.define; } catch(e){ window.define = void 0; } // IE
 				window.when = factory();
 			};
-			window.define.amd = {};
+			window.define.amd = {};*/
+			<?php
+			if(!Environment::getS("usePWEncryption", true))
+				echo "\$j(function(){
+					userControl.usePWEncryption = false;
+					\$j('#loginPWEncrypted').val('0');
+				});";
+			?>
 		</script>
+		<?php if(!file_exists(dirname(__FILE__)."/styles/standard/merge.css")){ ?>
+		
 		<link rel="stylesheet" type="text/css" href="./libraries/jquery/jquery-ui-1.10.1.custom.css" />
 		<link rel="stylesheet" type="text/css" href="./libraries/jquery/jquery.qtip.min.css" />
 		<link rel="stylesheet" type="text/css" href="./libraries/touchy/Touchy.css" />
@@ -233,6 +240,8 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 		<link rel="stylesheet" type="text/css" href="./styles/standard/TextEditor.css" />
 		<link rel="stylesheet" type="text/css" href="./styles/standard/colors.css" />
 		<?php
+		} else
+			echo "<link rel=\"stylesheet\" type=\"text/css\" href=\"./styles/standard/merge.css\" />";
 		
 		if($cssColorsDir != "standard") 
 			echo '
@@ -268,7 +277,11 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 		<div id="DynamicJS" style="display: none;"></div>
 		<!--<div style="position:fixed;top:0px;left:0px;width:20px;" id="growlContainer"></div>-->
 		<div id="boxInOverlay" style="display: none;" class="backgroundColor0 borderColor1">
-			<?php if(Environment::getS("showCopyright", "1") == "1") { ?>
+
+			<?php
+			echo Environment::getS("contentLoginTop", "");
+			
+			if(Environment::getS("showCopyright", "1") == "1") { ?>
 			<p style="color:grey;left:10px;position:fixed;bottom:10px;"><a style="color:grey;" target="_blank" href="http://www.furtmeier.it"><?php echo T::_("Unternehmenssoftware"); ?></a> <?php echo T::_("von Furtmeier Hard- und Software"); ?></p>
 			<?php } ?>
 			<form id="loginForm" onsubmit="return false;">
@@ -393,6 +406,7 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 								</label>
 							</div>
 							<input type="hidden" value="" name="loginSHAPassword" id="loginSHAPassword" />
+							<input type="hidden" value="1" name="loginPWEncrypted" id="loginPWEncrypted" />
 						</td>
 					</tr>
 					<?php if(strstr($_SERVER["SCRIPT_FILENAME"],"demo") OR $validUntil != null) { ?>
@@ -452,16 +466,6 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 					id="buttonCertificateLogin"
 					title="<?php echo T::_("Mit Zertifikat anmelden");?>"
 					alt="<?php echo T::_("Mit Zertifikat anmelden");?>"/>
-				<?php } ?>
-				<?php if(extension_loaded("curl")) { ?>
-				<img
-					class="mouseoverFade"
-					src="./images/persona.png"
-					style="margin-top:15px;display:none;"
-					onclick="navigator.id.request({siteName: 'phynx'});"
-					id="buttonPersonaLogin"
-					title="<?php echo T::_("Mit Mozilla Persona anmelden"); ?>"
-					alt="<?php echo T::_("Mit Mozilla Persona anmelden"); ?>"/>
 				<?php } ?>
 			</div>
 		</div>
@@ -682,6 +686,14 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 							class="iconic iconicL cursor"
 							id="buttonTouchReset"
 							title="Touch"></span>
+					<?php }
+					
+					if(Environment::getS("showMenuButton", "1") == "1"){ ?>
+						<span
+							style="cursor:pointer;float:right;margin-left:15px;margin-right:5px;"
+							class="iconic iconicL iphone"
+							id="buttonMenu"
+							title="Menü"></span>
 					<?php } ?>
 					<!--<xsl:if test="options/showDesktopButton/@value='true'">
 						<img
@@ -692,7 +704,7 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 							alt="Desktop"><xsl:attribute name="src"><xsl:value-of select="iconDesktop" /></xsl:attribute></img>
 					</xsl:if>-->
 					<?php if(Environment::getS("showCopyright", "1") == "1")
-						echo 'Copyright (C) 2007 - 2014 by <a href="http://www.Furtmeier.IT">Furtmeier Hard- und Software</a>. This program comes with ABSOLUTELY NO WARRANTY; this is free software, and you are welcome to redistribute it under certain conditions; see <a href="gpl.txt">gpl.txt</a> for details.<!--<br />Thanks to the authors of the libraries and icons used by this program. <a href="javascript:contentManager.loadFrame(\'contentRight\',\'Credits\');">View credits.</a>-->';
+						echo Environment::getS("contentCopyright", 'Copyright (C) 2007 - 2014 by <a href="http://www.Furtmeier.IT">Furtmeier Hard- und Software</a>. This program comes with ABSOLUTELY NO WARRANTY; this is free software, and you are welcome to redistribute it under certain conditions; see <a href="gpl.txt">gpl.txt</a> for details.<!--<br />Thanks to the authors of the libraries and icons used by this program. <a href="javascript:contentManager.loadFrame(\'contentRight\',\'Credits\');">View credits.</a>-->');
 					?>
 				</p>
 			</div>
@@ -735,16 +747,6 @@ if($sephy AND isset($sephy[3]) AND $sephy[3])
 					$j(this).fadeTo('slow', 0.3);
 				});
 
-
-				/*navigator.id.watch({
-					loggedInUser: <?php echo Session::currentUser() != null ? "'".Session::currentUser()->A("UserEmail")."'" : "null" ?>,
-					onlogin: function(assertion) {
-						userControl.doPersonaLogin(assertion);
-					},
-					onlogout: function() {
-						userControl.doLogout();
-					}
-				});*/
 				<?php 
 					if(Environment::getS("showApplicationsList", "1") == "0" OR count($_SESSION["applications"]->getApplicationsList()) <= 1)
 						echo "\$j('#loginOptions, #altLogins').hide();"

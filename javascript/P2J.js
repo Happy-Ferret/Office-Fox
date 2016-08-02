@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 /*
@@ -238,14 +238,17 @@ var Ajax = {
 	build: null,
 	counter: 0,
 	lastRequest: null,
+	lastRequestTime: Date.now(),
 	
 	Request: function(anurl, options){
 		Ajax.counter++;
 		Ajax.lastRequest = options.parameters;
+		Ajax.lastRequestTime = Date.now();
 		var counter = Ajax.counter;
 		var start;
 		$j.ajax({
-			url: anurl+(Ajax.physion != "default" ? (anurl.indexOf("?") > -1 ? "&": "?")+"physion="+Ajax.physion : ""), 
+			url: anurl+(Ajax.physion != "default" ? (anurl.indexOf("?") > -1 ? "&": "?")+"physion="+Ajax.physion : ""),
+			//timeout: 10000,
 			beforeSend: function(){
 				start = new Date().getTime();
 			},
@@ -495,7 +498,11 @@ if(typeof Modernizr != "undefined" && Modernizr.touch && useTouch == null){
 var iconic = IconicJS();
 var Touch = {
 	trigger: "click",
-	use:false,
+	use: false,
+	startPos: null,
+	cancelNext: false,
+	inAction: false,
+	
 	propagateCSS: function(){
 		if(!Touch.use)
 			$j("html").addClass("phynxNoTouch");
@@ -540,7 +547,7 @@ var Touch = {
 			return;
 		
 		$j("[onclick]").each(function(k, e){
-			$j(e).attr("ontouchend", $j(e).attr("onclick")).removeAttr("onclick");
+			$j(e).attr("ontouchend", "Touch.inAction = false; if(Touch.cancelNext) return; "+$j(e).attr("onclick")).removeAttr("onclick");
 		});
 		
 		/**$j("[onclick]").hammer().on("tap", function(ev){
@@ -558,6 +565,10 @@ if(useTouch){
 	
 	$j(document).on("touchend", ".contentBrowser td", function(ev){
 		$j(this).parent().removeClass("highlight");
+		Touch.inAction = false;
+		
+		if(Touch.cancelNext)
+			return;
 		
 		if(ev.target != this)
 			return;
@@ -573,15 +584,38 @@ if(useTouch){
 
 	$j(document).on("touchend mouseup", "[ontouchend]", function(ev){
 		$j(this).removeClass("highlight");
+		Touch.inAction = false;
 	});
 	
-
 	$j(document).on("touchstart mousedown", "[ontouchend]", function(ev){
 		$j(this).addClass("highlight");
+		
+		Touch.startPos = [ev.clientX, ev.clientY];
+		Touch.cancelNext = false;
+		Touch.inAction = this;
 	});
 
 	$j(document).on("touchstart", ".contentBrowser td", function(ev){
 		$j(this).parent().addClass("highlight");
+		
+		Touch.startPos = [ev.clientX, ev.clientY];
+		Touch.cancelNext = false;
+		Touch.inAction = this;
+	});
+	
+	
+	$j(document).on("touchmove mousemove", "[ontouchend], .contentBrowser td", function(ev){
+		if(!Touch.inAction)
+			return;
+		
+		if(Math.abs(ev.clientX - Touch.startPos[0]) < 15 && Math.abs(ev.clientY - Touch.startPos[1]) < 15)
+			return;
+		
+		//console.log("CANCEL!");
+		Touch.cancelNext = true;
+		
+		$j(ev.target).trigger("touchend");
+		
 	});
 	
 	$j(document).on("focus", 'input[type=text]', function(){
@@ -620,6 +654,11 @@ $j(function(){
 	} else {
 		$j('#buttonTouchReset').hide();
 	}
+	
+	if(typeof alex == "undefined")
+		$j('#buttonMenu').hide();
+	else
+		$j('#buttonMenu').on(Touch.trigger, function(){ alex.menu(); });
 });
 
 if(!useTouch){
@@ -698,4 +737,9 @@ $j(document).on('mouseover', '.bigButton', function(event) {
 		}
 		
 	}, event);
+});
+
+$j(document).on("keyup", function(){
+	if(Date.now() - Ajax.lastRequestTime > 5 * 60 * 1000)
+		contentManager.rmePCR('Menu','','autoLogoutInhibitor','');
 });

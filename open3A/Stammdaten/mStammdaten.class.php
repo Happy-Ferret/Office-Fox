@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mStammdaten extends anyC {
 	function __construct() {
@@ -26,6 +26,14 @@ class mStammdaten extends anyC {
 	 * @return Stammdaten
 	 */
 	public static function getActiveStammdaten(){
+		// <editor-fold defaultstate="collapsed" desc="Aspect:jP">
+		try {
+			$MArgs = func_get_args();
+			return Aspect::joinPoint("around", null, __METHOD__, $MArgs);
+		} catch (AOPNoAdviceException $e) {}
+		Aspect::joinPoint("before", null, __METHOD__, $MArgs);
+		// </editor-fold>
+		
 		$msd = new mStammdaten();
 		$msd->setAssocV3("aktiv","=","1");
 		$msd->lcV3();
@@ -33,15 +41,23 @@ class mStammdaten extends anyC {
 		return $msd->getNextEntry();
 	}
 	
-	public static function getReNrTemplate(){
-		$Stammdaten = new mStammdaten();
+	public static function getReNrTemplate($StammdatenID = null){
 		
-		$Stammdaten->setAssocV3("aktiv","=","1");
-		$Stammdaten->lCV3();
+		if($StammdatenID != null){
+			$sd3 = new Stammdaten($StammdatenID);
+			$sd3->loadMe();
+		} else {
+			$Stammdaten = new mStammdaten();
+
+			$Stammdaten->setAssocV3("aktiv","=","1");
+			$Stammdaten->lCV3();
+
+			$sd3 = $Stammdaten->getNextEntry();
+		}
 		
-		$sd3 = $Stammdaten->getNextEntry();
+		if($sd3 == null) 
+			die("error:AuftraegeMessages.E002");
 		
-		if($sd3 == null) die("error:AuftraegeMessages.E002");
 		$sd3 = $sd3->getA();
 		
 		$reNrClass = "Auftrag";

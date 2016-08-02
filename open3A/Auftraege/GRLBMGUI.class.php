@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 	
@@ -124,7 +124,60 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			$BNO->style("float:right;margin-right:5px;margin-top:5px;");
 			$BNO->rmePCR("Auftrag", $this->A("AuftragID"), "updateStatus", array("'declined'"), "function(){ showMessage('Angebot als abgeleht markiert'); contentManager.reloadFrame('contentRight'); }");
 		}
+		
+		
+		if($type == "B" AND ($this->A("GRLBMOrderGRLBMIDs") == "" OR $this->A("GRLBMOrderGRLBMIDs") == "note") AND Session::isPluginLoaded("mLBestellung")){
+			$BAB = new Button("Zur Bestellung\nvormerken", "bestellung");
+			$BAB->style("float:right;margin-right:10px;");
+			$BAB->className("backgroundColor2");
+			$BAB->rmePCR("GRLBM", $this->ID, "orderNote", "", "contentManager.loadFrame('subframe','GRLBM', $this->ID);");
+			if($this->A("GRLBMOrderGRLBMIDs") == "note")
+				$BAB->className("highlight");
+		}
+		
+		if($type == "B" AND $this->A("GRLBMOrderGRLBMIDs") != "" AND $this->A("GRLBMOrderGRLBMIDs") != "note" AND Session::isPluginLoaded("mLBestellung")){
+			$ids = explode(",", trim($this->A("GRLBMOrderGRLBMIDs"), ","));
+			$belege = "";
+			foreach ($ids AS $v){
+				$G = new GRLBM($v, false);
+				$belege .= ($belege == "" ? "" : ", ").$G->A("prefix").$G->A("nummer");
+			}
+			$BAB = "<div style=\"width:140px;float:right;margin-right:10px;height:30px;padding:5px;\" class=\"confirm\">Bestellt: $belege</div>";
+		}
+		
+		if($type == "B" AND ($this->A("GRLBMProductionLaufzettel") == "" OR $this->A("GRLBMProductionLaufzettel") == "note") AND Session::isPluginLoaded("mLaufzettel")){
+			$BAB = new Button("Zur Produktion\nvormerken", "./upFab/Laufzettel/Laufzettel.png");
+			$BAB->style("float:right;margin-right:10px;");
+			$BAB->className("backgroundColor2");
+			$BAB->rmePCR("GRLBM", $this->ID, "productionNote", "", "contentManager.loadFrame('subframe','GRLBM', $this->ID);");
+			if($this->A("GRLBMProductionLaufzettel") == "note")
+				$BAB->className("highlight");
+		}
+		
+		/*if($type == "L" AND ($this->A("GRLBMDeliveryStatus") == "" OR $this->A("GRLBMDeliveryStatus") == "booked") AND Session::isPluginLoaded("mLagerbestandWare")){
+			$BAB = new Button("Ware\nausbuchen", "navigation");
+			$BAB->style("float:right;margin-right:10px;");
+			$BAB->className("backgroundColor2");
+			$BAB->rmePCR("GRLBM", $this->ID, "deliveryNote", "", "contentManager.loadFrame('subframe','GRLBM', $this->ID);");
+			if($this->A("GRLBMDeliveryStatus") == "booked")
+				$BAB->className("confirm");
+		}
+		
+		/*
+		if($type == "L" AND ($this->A("GRLBMDeliveryStatus") == "" OR $this->A("GRLBMDeliveryStatus") == "note") AND Session::isPluginLoaded("mLBestellung")){
+			$BAB = new Button("Zur Lieferung\nvormerken", "navigation");
+			$BAB->style("float:right;margin-right:10px;");
+			$BAB->className("backgroundColor2");
+			$BAB->rmePCR("GRLBM", $this->ID, "deliveryNote", "", "contentManager.loadFrame('subframe','GRLBM', $this->ID);");
+			if($this->A("GRLBMDeliveryStatus") == "note")
+				$BAB->className("highlight");
+		}
+		
+		if($type == "L" AND $this->A("GRLBMDeliveryStatus") != "" AND $this->A("GRLBMDeliveryStatus") != "note" AND Session::isPluginLoaded("mLBestellung")){
+			$BAB = "<div style=\"width:140px;float:right;margin-right:10px;height:30px;padding:5px;\" class=\"confirm\">Geliefert: ".$this->A("GRLBMDeliveryStatus")."</div>";
+		}*/
 
+		
 		$pSpecData = mUserdata::getPluginSpecificData("Provisionen");
 
 		$newType = $type;
@@ -307,6 +360,7 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			$BFiles = mFileGUI::getManagerButton("GRLBM", $this->getID(), true);
 			$BFiles->style("float:right;");
 			
+			
 			$below .= $BFiles;
 		}
 		
@@ -324,7 +378,7 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			$below .= $BAddMP.$BDelMP;
 		
 		
-		if(Session::isPluginLoaded("mEtikette") AND $belegButtons["etiketten"] AND !Session::isPluginLoaded("mBestellung")) //Now in Bestellungen!
+		if(Session::isPluginLoaded("mEtikette") AND $belegButtons["etiketten"]/* AND !Session::isPluginLoaded("mBestellung")*/) //Now in Bestellungen!
 			$Tab->addRow(Etikette::getButton("GRLBM", $this->getID()));
 
 		if(Session::isPluginLoaded("mAufgabe") AND $Auftrag->A("kundennummer") > 0)
@@ -352,12 +406,11 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			
 			$CurrentVorlage = new $CurrentVorlage($Stammdaten);
 		} catch (ClassNotFoundException $e){
-			$CurrentVorlage = new Vorlage_any($Stammdaten);
-			
 			$ErrorVorlage = "<div class=\"error AuftragBelegContent\" style=\"padding:10px;padding-right:0px;\">Bitte überprüfen Sie Ihre Stammdaten, die ausgewählte Vorlage ($CurrentVorlage) konnte nicht gefunden werden.</div>";
+			$CurrentVorlage = new Vorlage_any($Stammdaten);
 		}
 		
-		for($i = 1; $i < 8; $i++){
+		for($i = 1; $i < 20; $i++){
 			$labelName = "labelCustomField$i";
 
 			if(isset($CurrentVorlage->$labelName) AND $CurrentVorlage->$labelName != null){
@@ -366,12 +419,31 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			}
 		}
 
-		$fields = array_merge($fields, array(/*"isAbschlussrechnung", */"lieferAdresseID", "nummer", "datum", "lieferDatum", "textbausteinObenID", "textbausteinUntenID", "zahlungsbedingungenID", "rabatt", "rabattInW", "leasingrate"));
+		$fields = array_merge($fields, array(/*"isAbschlussrechnung", */"lieferAdresseID", "nummer", "datum", "lieferDatum", "textbausteinObenID", "textbausteinUntenID", "zahlungsbedingungenID", "leasingrate"));
 
 		if($this->A("GRLBMReferenz") != ""){
-			array_unshift($fields, "GRLBMReferenznummer");
-			$gui->setType("GRLBMReferenznummer", "readonly");
-			$gui->setLabel("GRLBMReferenznummer", "Referenz");
+			if(strpos($this->A("GRLBMReferenz"), "Vertrag:") === 0){
+				array_unshift($fields, "GRLBMReferenz");
+				#$gui->setType("GRLBMReferenz", "readonly");
+				$gui->setLabel("GRLBMReferenz", "Referenz");
+				$gui->setParser("GRLBMReferenz", "GRLBMGUI::parserReferenz");
+			}
+			
+			if($this->A("GRLBMReferenznummer") != ""){
+				array_unshift($fields, "GRLBMReferenznummer");
+				$gui->setType("GRLBMReferenznummer", "readonly");
+				$gui->setLabel("GRLBMReferenznummer", "Referenz");
+
+				if(Session::isPluginLoaded("mAmazon")){
+					$O = anyC::getFirst("AmazonBestellung", "AmazonBestellungBestellnummer", $this->A("GRLBMReferenznummer"));
+					if($O != null){
+						$B = new Button("Amazon", "./ubiquitous/Amazon/aLogo18.png");
+						$B->popup("", "Amazon-Bestellung", "AmazonBestellung", $O->getID(), "detailsPopup");
+
+						$gui->activateFeature("addCustomButton", $this, "GRLBMReferenznummer", $B);
+					}
+				}
+			}
 		}
 		
 		if(Session::isPluginLoaded("mAnsprechpartner")){
@@ -385,6 +457,8 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 				$gui->setType("GRLBMAnsprechpartnerID", "select");
 				$gui->setOptions("GRLBMAnsprechpartnerID", array_keys($ansprechpartner), array_values($ansprechpartner));
 				$gui->setLabel("GRLBMAnsprechpartnerID", "Ansprechpartner");
+
+				$gui->activateFeature("addCustomButton", $this, "GRLBMAnsprechpartnerID", Ansprechpartner::getButtonSmall("Adresse", Kappendix::getAdresseIDToKundennummer($Auftrag->A("kundennummer")), "{}", "Ansprechpartner;GRLBMID:".$this->getID().""));
 			}
 		}
 
@@ -410,12 +484,12 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 			$gui->setParser("datum", "GRLBMGUI::parserDatumTermin", array($this->ID, $Auftrag->A("AdresseID"), Util::CLDateParser($this->A("datum"), "store")));
 		}
 		
-		if($newType != "R" AND $newType != "A" AND $newType != "B" AND $newType != "P" AND $newType != "0")
+		if($newType != "R" AND $newType != "A" AND $newType != "B" AND $newType != "P")# AND $newType != "0")
 			$gui->setType("lieferDatum", "hidden");
 
 		if($newType != "Kalk"){
-			$gui->setType("rabatt", "hidden");
-			$gui->setType("rabattInW", "hidden");
+			#$gui->setType("rabatt", "hidden");
+			#$gui->setType("rabattInW", "hidden");
 			$gui->setType("leasingrate", "hidden");
 
 			$gui->setParser("textbausteinObenID", "GRLBMGUI::textbausteinParser", array("oben", $this->getMyPrefix(), $this->A("textbausteinOben"), $this->A("isPayed")));
@@ -456,14 +530,14 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 		$gui->setLabel("isAbschlussrechnung", "Abschlussre.");
 		$gui->setLabel("lieferAdresseID", "Belegadresse");
 		$gui->setLabel("lieferDatum", "Lieferdatum");
-		$gui->setLabel("rabattInW", "Rabatt");
+		#$gui->setLabel("rabattInW", "Rabatt");
 		$gui->setLabel("leasingrate", "Leasingfaktor");
 		$gui->setLabel("textbausteinObenID", "TB oben");
 		$gui->setLabel("textbausteinUntenID", "TB unten");
 		$gui->setLabel("zahlungsbedingungenID", "Zahlungsbed.");
 
-		$gui->setLabelDescription("rabatt", "in %");
-		$gui->setLabelDescription("rabattInW", "in €");
+		#$gui->setLabelDescription("rabatt", "in %");
+		#$gui->setLabelDescription("rabattInW", "in €");
 		$gui->setLabelDescription("leasingrate", "in %");
 
 
@@ -502,6 +576,16 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 		}*/
 		
 		return $T.$ErrorVorlage."<div style=\"border-right:1px solid #eee;padding-right:9px;\" class=\"AuftragBelegContent\">"."<div id=\"AuftragBeleg\">".$postenRechnung->getHTML(-1,$this->A->AuftragID,"",$this->ID)."</div><div style=\"width:430px;\">".$html.$TabBelow."</div>".OnEvent::script("Auftrag.reWidth();")."</div>";#($type != "Kalk" ? $html : "");
+	}
+	
+	public static function parserReferenz($w){
+		$V = new Vertrag(str_replace("Vertrag:", "", $w));
+		
+		$B = new Button("Vertrag öffnen", "./images/i2/redo.png", "icon");
+		$B->style("float:right;");
+		$B->loadPlugin("contentRight", "mVertrag", "", str_replace("Vertrag:", "", $w));
+		
+		return $B."Erstellt von Vertrag ".$V->A("VertragNummer");
 	}
 
 	public static function parserDatumTermin($w, $l, $p){
@@ -603,7 +687,8 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 		$B1 = new Button("1x-Belegadresse verwenden", "./open3A/Auftraege/1xlieferAdresse.png");
 		$B1->style("float:right;margin-left:10px;");
 		$B1->type("icon");
-		$B1->onclick("contentManager.loadFrame('contentRight','Adresse', -1, 0,'AdresseGUI;AuftragID:$s[0];displayMode:lieferAdresse');");
+		$B1->editInPopup("AuftragAdresse", "-1", "Adresse anlegen", "AuftragAdresseGUI;AuftragID:$s[0];displayMode:lieferAdresse");
+		#$B1->onclick("contentManager.loadFrame('contentRight','Adresse', -1, 0,'AdresseGUI;AuftragID:$s[0];displayMode:lieferAdresse');");
 
 		$BC = new Button("Belegadresse ändern", "./open3A/Auftraege/lieferAdresse.png");
 		$BC->style("float:right;");
@@ -719,6 +804,14 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 
 					echo $gui->getContextMenu($kAL, "GRLBM", "useDSN", $selectedKey);
 				}
+				
+				echo "<div style=\"margin:1px;margin-top:10px;padding:3px;font-weight:bold;\" class=\"backgroundColor2\">Bei Mahnung:</div>";
+				
+				$kAL = array();
+				$kAL["false"] = "Keine Rechnung anhängen";
+				$kAL["true"] = "Rechnung anhängen";
+				
+				echo $gui->getContextMenu($kAL, "GRLBM", "mailAttachInvoice", mUserdata::getUDValueS("sendBelegViaEmailAttachInvoice", "false"));
 			break;
 			
 			case "setPayed":
@@ -794,6 +887,11 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 		
 		if($identifier == "useDSN")
 			$ud->setUserdata("sendBelegViaEmailDSN",$key);
+		
+		if($identifier == "mailAttachInvoice")
+			$ud->setUserdata("sendBelegViaEmailAttachInvoice",$key);
+		
+		
 	}
 	// </editor-fold>
 	
@@ -804,16 +902,28 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 	
 	public function getPostenCopy($ArtikelID, $menge = 1, $beschreibung = null, $kundennummer = null, $preis = null){
 		$PostenID = parent::getPostenCopy($ArtikelID);
-		Red::messageD("Posten erstellt", array("PostenID" => $PostenID));
+		Red::messageD("Posten erstellt", array("PostenID" => $PostenID, "bestand" => $this->newPostenMessageBestand));
 	}
 
 	public function setPayed($p, $skonto = "0,00", $datum = "0", $isTeilzahlung = "false", $TeilzahlungBetrag = "", $save = true){
 		echo parent::setPayed($p, $skonto, $datum, $isTeilzahlung, $TeilzahlungBetrag, $save);
 	}
 	
-	public function copyPostenFrom($fromId, $addToSort = 0){
+	public function copyPostenFromMulti($from){
+		parse_str($from, $data);
+		$copy = "";
+		foreach($data AS $k => $v)
+			if($v)
+				$copy[] = str_replace("GRLBM_", "", $k);
+			
+		parent::copyPostenFromMulti($copy);
+		Red::messageD("Positionen kopiert");
+	}
+	
+	public function copyPostenFrom($fromId, $addToSort = 0, $output = true){
 		parent::copyPostenFrom($fromId, $addToSort);
-		echo "message:AuftraegeMessages.M002";
+		if($output)
+			echo "message:AuftraegeMessages.M002";
 	}
 	
 	public function copyPostenByTypeAndNumber($fromNumber, $fromType){
@@ -835,9 +945,38 @@ class GRLBMGUI extends GRLBM implements iGUIHTML2, icontextMenu {
 		return $IF."<div id=\"lieferDatumContainer\" style=\"width:90%;".($p != "" ? "display:none;" : "")."\">".$I."</div>".$IT;
 	}
 	
+	public function orderNote(){
+		$this->changeA("GRLBMOrderGRLBMIDs", "note");
+		$this->changeA("isPayed", "1");
+		$this->changeA("GRLBMpayedDate", time());
+		$this->saveMe();
+	}
+	/*
+	public function deliveryNote(){
+		$this->changeA("GRLBMDeliveryStatus", "note");
+		$this->changeA("isPayed", "1");
+		$this->changeA("GRLBMpayedDate", time());
+		$this->saveMe();
+	}*/
+	
+	public function productionNote(){
+		$this->changeA("GRLBMProductionLaufzettel", "note");
+		$this->changeA("isPayed", "1");
+		$this->changeA("GRLBMpayedDate", time());
+		$this->saveMe();
+	}
+	
 	public function addFile($id){
 		mFileGUI::addFile("GRLBM",$this->ID, $id);
 		Red::messageSaved();
+	}
+	
+	public function saveRabatt($rabatt){
+		$this->changeA("rabatt", Util::CLNumberParserZ($rabatt, "store"));
+		$this->saveMe();
+		
+		$G = new GRLBM($this->getID());
+		$G->getSumOfPosten(false, true);
 	}
 
 	// <editor-fold defaultstate="collapsed" desc="getLieferscheinAdresseCopy">

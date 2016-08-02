@@ -15,20 +15,22 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 	public $showAttributes = array(
 		"kundennummer",
 		"UStIdNr"/*,"KappendixErloeskonto"*/,
+		"KappendixLieferadresseAdresseID",
 		"KappendixSameKontoinhaber",
 		"KappendixKontoinhaber",
-		"KappendixKontonummer",
-		"KappendixBLZ",
+		#"KappendixKontonummer",
+		#"KappendixBLZ",
 		"KappendixIBAN",
 		"KappendixSWIFTBIC",
 		"KappendixEinzugsermaechtigung",
 		"KappendixIBANMandatDatum",
+		"KappendixIBANMandatReferenz",
 		"KappendixEinzugsermaechtigungAltZBTB",
 		"KappendixKreditkarte",
 		"KappendixKartennummer",
@@ -66,6 +68,51 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		if(Session::isPluginLoaded("mexportLexware") OR Session::isPluginLoaded("mexportDatev"))
 			$gui->insertAttribute("after", "UStIdNr", "KappendixErloeskonto");
 		
+		if(Session::isPluginLoaded("mPreisgruppe")){
+			$gui->insertAttribute ("after", "UStIdNr", "KappendixPreisgruppe");
+			$gui->setLabel("KappendixPreisgruppe", "Preisgruppe");
+			$gui->setType("KappendixPreisgruppe", "select");
+			
+			$nl = array("Keine");
+			for($i = 1; $i < 9; $i++){
+				$ng = mUserdata::getGlobalSettingValue("preisGruppeName$i", "");
+				if($ng == "")
+					$nl[] = "Gruppe $i";
+				else
+					$nl[] = $ng;
+			}
+			
+			$gui->setOptions("KappendixPreisgruppe", array(0, 1, 2, 3, 4, 5, 6, 7, 8), $nl);
+		}
+		
+		if(Session::isPluginLoaded("mArtikelRG")){
+			$gui->insertAttribute ("after", "UStIdNr", "KappendixRabattgruppe");
+			$gui->setLabel("KappendixRabattgruppe", "Rabattgruppe");
+			$gui->setType("KappendixRabattgruppe", "select");
+			$gui->setOptions("KappendixRabattgruppe", array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), array("Keine", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+			$gui->activateFeature("addSaveDefaultButton", $this, "KappendixRabattgruppe");
+		}
+		
+		if(Session::isPluginLoaded("mZahlungsart")){
+			$gui->insertAttribute ("after", "UStIdNr", "KappendixRZahlungsart");
+			$gui->setLabel("KappendixRZahlungsart", "Zahlungsart");
+			$gui->setType("KappendixRZahlungsart", "select");
+			
+			$Z = GRLBM::getPaymentVia();
+			$N = array("" => "Standard");
+			foreach($Z AS $k => $ZA){
+				$TB = Zahlungsart::getTB($k);
+				if($TB != null)
+					$N[$k] = $ZA." (TB: ".$TB->A("label").")";
+				else
+					$N[$k] = $ZA." (kein TB)";
+			}
+			
+			
+			$gui->setOptions("KappendixRZahlungsart", array_keys($N), array_values($N));
+			
+		}
+		
 		$gui->setType("AdresseID","hidden");
 		$gui->setType("bemerkung","textarea");
 		$gui->setFormID("KappendixForm");
@@ -76,6 +123,7 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		$B->style("float:right;");
 		$gui->activateFeature("addCustomButton", $this, "KappendixKontonummer", $B);
 		
+		$gui->setLabel("KappendixLieferadresseAdresseID", "Lieferadresse");
 		$gui->setLabel("KappendixKontoinhaber","Kontoinhaber");
 		$gui->setLabel("KappendixKontonummer","Kontonummer");
 		$gui->setLabel("KappendixBLZ","BLZ");
@@ -89,6 +137,8 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		$gui->insertSpaceAbove("KappendixSameKontoinhaber", "Bank");
 		$gui->insertSpaceAbove("bemerkung");
 		$gui->insertSpaceAbove("KappendixKreditkarte", "Kreditkarte");
+		
+		$gui->setParser("KappendixLieferadresseAdresseID", "KappendixGUI::parserLieferadresse");
 		
 		if(Session::isPluginLoaded("Provisionen")){
 			$gui->insertSpaceAbove("KappendixProvisionUserID", "Provisionen");
@@ -132,6 +182,7 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		$gui->setLabel("KappendixKarteValidUntil","gültig bis");
 		$gui->setLabel("KappendixEinzugsermaechtigungAltZBTB","ZahlBed.");
 		$gui->setLabel("KappendixIBANMandatDatum", "Mandatsdatum");
+		$gui->setLabel("KappendixIBANMandatReferenz", "Mandatsreferenz");
 		
 		$B = new Button("USt-IdNt überprüfen","./images/i2/okCatch.png");
 		$B->type("icon");
@@ -139,7 +190,7 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 
 		$gui->activateFeature("addCustomButton", $this, "UStIdNr", $B);
 
-		$gui->setInputJSEvent("KappendixEinzugsermaechtigung", "onclick", "contentManager.toggleFormFields(!this.checked ? 'hide' : 'show', ['KappendixEinzugsermaechtigungAltZBTB', 'KappendixIBANMandatDatum']);");
+		$gui->setInputJSEvent("KappendixEinzugsermaechtigung", "onclick", "contentManager.toggleFormFields(!this.checked ? 'hide' : 'show', ['KappendixEinzugsermaechtigungAltZBTB', 'KappendixIBANMandatDatum', 'KappendixIBANMandatReferenz']);");
 
 		$tb = new Textbausteine();
 		list($keys,$values) = $tb->getTBs("zahlungsbedingungen","R");
@@ -148,9 +199,11 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		$gui->setType("KappendixEinzugsermaechtigungAltZBTB","select");
 		$gui->setOptions("KappendixEinzugsermaechtigungAltZBTB", $keys, $values);
 		$gui->setFieldDescription("KappendixEinzugsermaechtigungAltZBTB", "Dieser Textbaustein wird verwendet, wenn eine Einzugsermächtigung erteilt wurde.");
+		$gui->setFieldDescription("KappendixIBANMandatReferenz", "Standard: Kundennummer + IBAN");
 		if($this->A("KappendixEinzugsermaechtigung") === "0"){
 			$gui->setLineStyle("KappendixEinzugsermaechtigungAltZBTB", "display:none;");
 			$gui->setLineStyle("KappendixIBANMandatDatum", "display:none;");
+			$gui->setLineStyle("KappendixIBANMandatReferenz", "display:none;");
 		}
 		$gui->setType("KappendixSameKontoinhaber","checkbox");
 		$gui->setLabel("KappendixSameKontoinhaber", "Inhaber?");
@@ -180,6 +233,7 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		#$gui->setSaveButtonValues(get_parent_class($this), $this->ID, "Adressen");
 		
 		$gui->customize($this->customizer);
+		Aspect::joinPoint("gui", $this, __METHOD__, array($gui));
 		
 		#if(isset($bps["mode"]) AND $bps["mode"] == "short"){
 		#	$T = new HTMLTable(1);
@@ -200,6 +254,13 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		
 		#<input type=\"button\" class=\"bigButton backgroundColor3\" value=\"freie\nKundennummern\" onclick=\"\" />
 		return $T.$gui->getEditHTML();
+	}
+	
+	public static function parserLieferadresse($w){
+		$I = new HTMLInput("KappendixLieferadresseAdresseID", "text", $w);
+		$I->autocomplete("mAdresse");
+		
+		return $I;
 	}
 	
 	public function popupTextbausteine(){
@@ -240,6 +301,7 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 			$F->setLabel($grlbms[$i]."TextbausteinUnten","TB unten");
 			$F->setType($grlbms[$i]."TextbausteinUnten","select", null, $T);
 			
+			
 			$tb = new Textbausteine();
 			list($keys, $values) = $tb->getTBs("zahlungsbedingungen", $grlbms[$i]);
 			$T = array("0" => "Standard verwenden");
@@ -247,11 +309,19 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 			
 			$F->setLabel($grlbms[$i]."Zahlungsbedingungen","ZahlBed.");
 			$F->setType($grlbms[$i]."Zahlungsbedingungen","select", null, $T);
+			
+			if(Session::isPluginLoaded("mZahlungsart") AND $grlbms[$i] == "R"){
+				$F->setType($grlbms[$i]."Zahlungsbedingungen", "parser", null, array("KappendixGUI::parserTBR"));
+			}
 		}
 		
 		$F->setSaveClass("Kappendix", $this->getID(), "function(){ ".OnEvent::closePopup("Kappendix")." }");
 		
 		echo $F;
+	}
+	
+	public static function parserTBR(){
+		return "Festgelegt durch Zahlungsart";
 	}
 
 	public static function parserProvBaseValue($w, $l, $p){
@@ -313,6 +383,9 @@ class KappendixGUI extends Kappendix implements iGUIHTML2, icontextMenu {
 		
 		$c = file_get_contents("http://evatr.bff-online.de/evatrRPC?UstId_1=$UStIdNr1&UstId_2=$UStIdNr2&Firmenname=&Ort=&PLZ=&Strasse=&Druck=");
 
+		if($c === false)
+			Red::errorD ("Keine Verbindung zum Server!");
+		
 		$xml = new SimpleXMLElement($c);
 
 		echo "alert:'".$errors[$xml->param[1]->value->array->data->value[1]->string.""]."'";

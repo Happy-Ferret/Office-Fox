@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mGRLBMGUI extends anyC implements iGUIHTMLMP2 {
 	function __construct($id = "") {
@@ -97,6 +97,8 @@ class mGRLBMGUI extends anyC implements iGUIHTMLMP2 {
 		$AC->setParser("rabattInW","Util::CLNumberParserZ");
 		$AC->setParser("leasingrate","Util::CLNumberParserZ");
 		
+		$AC->addOrderV3("datum","DESC");
+		$AC->addOrderV3("LENGTH(nummer)","DESC");
 		$AC->addOrderV3("nummer","DESC");
 		$AC->customize();
 		
@@ -121,7 +123,7 @@ class mGRLBMGUI extends anyC implements iGUIHTMLMP2 {
 		
 		$T = "<div style=\"padding-left:10px;padding-top:10px;padding-bottom:30px;/*background-color:#eee;*/\" class=\"AuftragBelegContent backgroundColor4\">$B</div>";
 		
-		$html = "<div style=\"clear:right;\"></div><div style=\"margin-left:10px;max-height:400px;overflow:auto;\" class=\"AuftragBelegContent\">";
+		$html = Aspect::joinPoint("aboveBelege", $this, __METHOD__, array($this->type, $bps["AuftragID"]), "")."<div style=\"clear:right;\"></div><div style=\"margin-left:10px;max-height:400px;overflow:auto;\" class=\"AuftragBelegContent\">";
 		
 		$month = null;
 		while($G = $AC->getNextEntry()){
@@ -144,7 +146,7 @@ class mGRLBMGUI extends anyC implements iGUIHTMLMP2 {
 		return $T."<div style=\"border-right:1px solid #eee;padding-right:9px;padding-top:60px;\" class=\"AuftragBelegContent\">".$html."</div>".OnEvent::script("Auftrag.reWidth();");#$gui->getBrowserHTML(-1);
 	}
 	
-	public static function belegBox(GRLBM $G, $onclick, $thirdLine = ""){
+	public static function belegBox(GRLBM $G, $onclick, $thirdLine = "", $onSelect = ""){
 		if($G->hasParsers)
 			$datum = Util::CLDateParser($G->A("datum"), "store");
 		else
@@ -165,16 +167,23 @@ class mGRLBMGUI extends anyC implements iGUIHTMLMP2 {
 		if($G->A("isAbschlussrechnung") == "0")
 		$BAbschluss = "";
 
+		$I = "";
+		if($onSelect){
+			$I = new HTMLInput("GRLBM_".$G->getID(), "checkbox");
+			$I->style("float:right;vertical-align:top;");
+			$I->onchange($onSelect);
+		}
+		
 		$B = new Button("Beleg anzeigen","./images/i2/pdf.gif", "icon");
 		$B->style("float:left;margin-right:5px;");
 
 		$html = "
-			<div class=\"backgroundColor3 selectionBox\" onclick=\"$onclick\" style=\"\">
+			<div class=\"backgroundColor3 selectionBox\" onclick=\"if(event.target.type == 'checkbox') return; $onclick\" style=\"\">
 				<span style=\"float:right;color:grey;\">
 					<small>".Util::CLFormatCurrency($G->A("bruttobetrag") * 1)."</small>
 				</span>
 				".$B.substr($G->getMyPrefix(), 0, 1)." ".$G->A("nummer")."<br />
-				$BPrinted$BMailed$BAbschluss<small style=\"color:grey;\">".date("d", $datum).". ".Util::CLMonthName(date("m", $datum))."</small>
+				$I$BPrinted$BMailed$BAbschluss<small style=\"color:grey;\">".date("d", $datum).". ".Util::CLMonthName(date("m", $datum))."</small>
 				".($thirdLine != "" ? "<br /><small style=\"color:grey;\">$thirdLine</small>" : "").Aspect::joinPoint("3rdLine", null, __METHOD__, array($G), "")."
 			</div>";
 		

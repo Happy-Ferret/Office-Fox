@@ -23,7 +23,7 @@ class FPDF_Protection extends FPDF
     protected $last_rc4_key;       //last RC4 key encrypted (cached for optimisation)
     protected $last_rc4_key_c;     //last RC4 computed key
 
-    function FPDF_Protection($orientation='P', $unit='mm', $format='A4')
+    function __construct($orientation='P', $unit='mm', $format='A4')
     {
         parent::FPDF($orientation, $unit, $format);
 

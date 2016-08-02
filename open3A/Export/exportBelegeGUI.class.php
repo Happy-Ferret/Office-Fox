@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class exportBelegeGUI extends exportDefault implements iExport {
 	protected $usedDate = "datum";
@@ -72,6 +72,24 @@ class exportBelegeGUI extends exportDefault implements iExport {
 		return $AC;
 	}
 	
+	protected function formFields(){
+		return array("ZeitraumStart", "ZeitraumEnde");
+	}
+	
+	protected function getForm() {
+		$TT = new HTMLForm("exportBelegeForm", $this->formFields(), "Einstellungen");
+		$TT->hasFormTag(false);
+		$TT->getTable()->setColWidth(1, 120);
+		
+		$TT->setType("ZeitraumStart", "date");
+		$TT->setType("ZeitraumEnde", "date");
+		
+		$TT->setLabel("ZeitraumStart", "Von");
+		$TT->setLabel("ZeitraumEnde", "Bis");
+		
+		return $TT;
+	}
+	
 	public function getHTML($id, $page = 0){
 		self::$className = get_class($this);
 		$AC = $this->getExportPreviewCollection();
@@ -102,24 +120,14 @@ class exportBelegeGUI extends exportDefault implements iExport {
 		$ST = new HTMLSideTable("right");
 
 		$B = $ST->addButton("jetzt\nexportieren", "export");
-		$B->windowRme(str_replace("GUI", "", get_class($this)), "-1", "getExportData", array("joinFormFields('exportForm')"));
+		$B->windowRme(str_replace("GUI", "", get_class($this)), "-1", "getExportData", array("joinFormFields('exportBelegeForm')"));
 
 		$B = $ST->addButton("Auswahl\ninvertieren", "bestaetigung");
-		$B->onclick("for(i = 0;i < $('exportForm').elements.length;i++) { $('exportForm').elements[i].checked = !$('exportForm').elements[i].checked; }");
+		$B->onclick("for(i = 0;i < $('exportBelegeForm').elements.length;i++) { $('exportBelegeForm').elements[i].checked = !$('exportBelegeForm').elements[i].checked; }");
 
-		$TT = new HTMLTable(2, "Bitte geben Sie einen Zeitraum ein:");
-		$TT->setColWidth(1, 120);
-		
-		$IS = new HTMLInput("ZeitraumStart", "date");
-		$IS->hasFocusEvent(true);
+		$TT = $this->getForm();
 
-		$IE = new HTMLInput("ZeitraumEnde", "date");
-		$IE->hasFocusEvent(true);
-
-		$TT->addLV("Von:", $IS);
-		$TT->addLV("Bis:", $IE);
-
-		return $ST."<form id=\"exportForm\">".$TT."<div style=\"margin-top:30px;\">".$gui->getBrowserHTML($id)."</div></form>";
+		return $ST."<form id=\"exportBelegeForm\">".$TT."<div style=\"margin-top:30px;\">".$gui->getBrowserHTML($id)."</div></form>";
 	}
 
 	public static function nummerParser($w, $E){
@@ -153,7 +161,7 @@ class exportBelegeGUI extends exportDefault implements iExport {
 		return new CSVExport(count($this->headers));
 	}
 	
-	public function getExportData($data){
+	public function getExportData($data, $start = null, $count = null, $CK1 = null){
 		parse_str($data, $parsedData);
 		unset($parsedData["targetPage"]);
 
@@ -269,7 +277,7 @@ class exportBelegeGUI extends exportDefault implements iExport {
 				if($v == "0") continue;
 
 				$k = str_replace("exportBeleg", "", $k);
-				$AC->addAssocV3("GRLBMID", "=", $k, $c == 0 ? "AND" : "OR", "2");
+				$AC->addAssocV3("t1.GRLBMID", "=", $k, $c == 0 ? "AND" : "OR", "2");
 
 				$c++;
 			}
@@ -284,7 +292,7 @@ class exportBelegeGUI extends exportDefault implements iExport {
 			#$AC->addAssocV3("isR", "=", "1", "AND", "1");
 			#$AC->addAssocV3("isG", "=", "1", "OR", "1");
 
-			$AC->addAssocV3($this->usedDate, ">", $data["ZeitraumStart"], "AND", "2");
+			$AC->addAssocV3($this->usedDate, ">=", $data["ZeitraumStart"], "AND", "2");
 
 			if(isset($data["ZeitraumEnde"]))
 				$AC->addAssocV3($this->usedDate, "<=", $data["ZeitraumEnde"], "AND", "2");
@@ -292,7 +300,9 @@ class exportBelegeGUI extends exportDefault implements iExport {
 			$c++;
 		}
 
-		if($c == 0) return null;
+		if($c == 0) 
+			return null;
+		
 		return $AC;
 	}
 

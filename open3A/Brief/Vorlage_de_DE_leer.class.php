@@ -15,14 +15,14 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class Vorlage_de_DE_leer extends Vorlage_any implements iVorlage {
-	function __construct($S = null){
+	function __construct($S = null, $SpracheID){
 		$this->positionFirmaSchriftzug = array(20, 12);
 		
-		parent::__construct($S);
+		parent::__construct($S, $SpracheID);
 	}
 	
 	function getLabel(){

@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class HTMLInput {
 	private $type;
@@ -50,6 +50,12 @@ class HTMLInput {
 	private $autocorrect = true;
 	private $spellcheck = true;
 	private $title;
+	private $parentValue;
+	private $data = array();
+	
+	public function parentValue($PV){
+		$this->parentValue = $PV;
+	}
 	
 	public function __construct($name, $type = "text", $value = null, $options = null){
 		$this->name = $name;
@@ -60,6 +66,10 @@ class HTMLInput {
 
 	public function title($title){
 		$this->title = $title;
+	}
+	
+	public function data($key, $value){
+		$this->data[$key] = $value;
 	}
 	
 	public function maxlength($length){
@@ -90,6 +100,10 @@ class HTMLInput {
 		$this->type = $type;
 	}
 	
+	public function getType(){
+		return $this->type;
+	}
+	
 	public function placeholder($text){
 		$this->placeholder = T::_($text);
 	}
@@ -107,8 +121,11 @@ class HTMLInput {
 
 	public function setOptions($options, $labelField = null, $zeroEntry = "bitte auswählen", $additionalOptions = null){
 		if(is_object($options) AND $options instanceof Collection AND $labelField != null){
-			$this->options = array("0" => $zeroEntry);
-
+			if($zeroEntry !== null)
+				$this->options = array("0" => $zeroEntry);
+			else
+				$this->options = array();
+			
 			while($t = $options->getNextEntry())
 				$this->options[$t->getID()] = $t->A($labelField);
 		} else
@@ -167,11 +184,11 @@ class HTMLInput {
 		return $this->value;
 	}
 
-	public function requestFocus(){
+	public function requestFocus($setToLast = false){
 		if($this->id === null)
 			$this->id = "Field".rand(100, 1000000);
 		
-		$this->requestFocus = "<script type=\"text/javascript\">setTimeout(function() { $('$this->id').focus(); }, 200);</script>";
+		$this->requestFocus = "<script type=\"text/javascript\">setTimeout(function() { \$j('#$this->id').trigger('focus'); ".($setToLast ? "var strLength = \$j('#$this->id').val().length; \$j('#$this->id')[0].setSelectionRange(strLength, strLength);;" : "")." }, 200);</script>";
 	}
 	
 	public function onEnter($function){
@@ -205,7 +222,7 @@ class HTMLInput {
 
 	public function  __toString() {
 		#$style = "";
-		if($this->type == "date" AND strpos($this->style, "width:") === false) $this->style .= "width:87%;";
+		if($this->type == "date" AND strpos($this->style, "width:") === false) $this->style .= "width:calc(100% - 28px)%;";
 		#if($this->style != null) $style = " style=\"$this->style\"";
 
 		switch($this->type){
@@ -300,13 +317,15 @@ class HTMLInput {
 			break;
 		
 			case "tinyMCE":
-
 				$BO = array("'{$this->options[0]}'", "'{$this->options[1]}'");
 				if(isset($this->options[2]))
 					$BO[] = "'{$this->options[2]}'";
+				if(isset($this->options[3]))
+					$BO[] = "'{$this->options[3]}'";
 					
 				$B = new Button("in Editor\nbearbeiten","editor");
 				#$B->windowRme("Wysiwyg","","getEditor","","WysiwygGUI;FieldClass:{$this->options[0]};FieldClassID:{$this->options[1]};FieldName:{$this->options[2]}");
+				$B->doBefore("Overlay.showDark(); %AFTER");
 				$B->popup("", "Editor", "tinyMCE", "-1", "editInPopup", $BO, "", "Popup.presets.large");
 				$B->className("backgroundColor2");
 
@@ -364,6 +383,7 @@ class HTMLInput {
 					".($this->onblur != null ? "onblur=\"$this->onblur\"" : "")."
 					".($this->onfocus != null ? "onfocus=\"$this->onfocus\"" : "")."
 					".($this->onkeyup != null ? "onkeyup=\"$this->onkeyup\"" : "")."
+					".($this->isDisabled ? "disabled=\"disabled\"" : "")."
 					".($this->hasFocusEvent ? "onfocus=\"focusMe(this);\" onblur=\"blurMe(this);\"" : "")."
 					".($this->id != null ? "id=\"$this->id\"" : "").">$this->value</textarea>";
 			break;
@@ -375,7 +395,7 @@ class HTMLInput {
 				
 				if(isset($this->options["autoUpload"]) AND !$this->options["autoUpload"])
 					$this->callback = "QQUploader$currentId.uploadStoredFiles();";
-				
+
 				return "
 					<div id=\"progress_$currentId\" style=\"height:10px;width:95%;display:none;\" class=\"\">
 						<div id=\"progressBar_$currentId\" style=\"height:10px;width:0%;\" class=\"backgroundColor1\"></div>
@@ -386,7 +406,7 @@ class HTMLInput {
 							maxSizePossible: '".ini_get("upload_max_filesize")."B',
 							sizeLimit: ".Util::toBytes(ini_get("upload_max_filesize")).",
 							element: \$j('#$currentId')[0],
-							action: './interface/set.php',
+							action: '".(($this->options != null AND isset($this->options["action"])) ? $this->options["action"] : "./interface/set.php")."',
 							params: {
 								'class': '".(($this->options == null OR !isset($this->options["class"])) ? "TempFile" : $this->options["class"])."'
 								,'id':'-1'
@@ -404,14 +424,22 @@ class HTMLInput {
 
 			case "time":
 				$this->type = "text";
+				if($this->multiEditOptions != null)
+					$this->id($this->name."ID".$this->multiEditOptions[1]);
+				
 				if(!$this->id)
-					$this->id = rand (100000, 9999999).$this->name;
+					$this->id = rand(100000, 9999999).$this->name;
 				
 				#$this->onkeyup .= "if(\$j(this).val().length == 2 && \$j(this).val().lastIndexOf(':') == -1) \$j(this).val(\$j(this).val()+':'); ";
 				if($this->connectTo)
 					$this->onkeyup .= "contentManager.connectedTimeInput(event, '$this->id', '$this->connectTo'); ";
 				else
 					$this->onkeyup .= "contentManager.timeInput(event, '$this->id'); ";
+				
+			case "time2":
+				if($this->type == "time2")
+					$this->type = "time";
+				
 				
 			case "radio1":
 			case "date":
@@ -425,6 +453,7 @@ class HTMLInput {
 			case "checkbox":
 			case "readonly":
 			case "fileold":
+			case "color":
 				$JS = "";
 				if($this->type == "radio1")
 					$this->type = "radio";
@@ -476,6 +505,11 @@ class HTMLInput {
 				$value = "value=\"".htmlspecialchars($this->value)."\"";
 				if($this->type == "checkbox") $value = $this->value == "1" ? "checked=\"checked\"" : "";
 
+				$data = "";
+				foreach($this->data AS $k => $v)
+					$data .= " data-$k=\"$v\"";
+				
+				
 
 				if($this->autocomplete != null){
 					if($this->id == null)
@@ -508,28 +542,36 @@ class HTMLInput {
 						
 						$IN = new HTMLInput($this->name, "hidden", htmlspecialchars($this->value));
 						$IN->id($this->name);
+						if($this->onchange){
+							$IN->onchange($this->onchange);
+							$this->onchange = "";
+						}
 						$JS .= $IN;
 						
-						$this->autocomplete[1] = "function(selection){ $('$this->id').value = selection.value; $('{$this->id}Display').value = selection.label; return false; }";
+						$this->autocomplete[1] = "function(selection){ if(!selection) return false; var oldVal = \$j('#$this->id').val(); \$j('#$this->id').val(selection.value); if(\$j('#$this->id').val() != oldVal) \$j('#$this->id').trigger('change'); $('{$this->id}Display').value = selection.label; return false; }";
 						
 						if($this->value != ""){
 							$C = substr($this->autocomplete[0], 1)."GUI";
 							$C = new $C($this->value);
 							
-							$value = "value=\"".htmlspecialchars($C->ACLabel($this->value))."\"";
+							$value = "value=\"".htmlspecialchars($C->ACLabel($this->value, (is_array($this->autocomplete[3]) ? $this->autocomplete[3] : array($this->autocomplete[3]))))."\"";
 						}
 						
+						$this->onkeyup .= "if(\$j('[name={$this->name}Display]').val() == '') {  \$j('[name=$this->name]').val(''); } ";
+						
 						$this->id.= "Display";
+						$this->name .= "Display";
 						$this->onkeyup .= "\$j('[name=$this->name]').val(this.value);";
 						
 					}
 					
 					 $JS .= OnEvent::script("var OnSelectCallback$this->id = ".$this->autocomplete[1]."; \$j(\"input#$this->id\").autocomplete({
 						source: function(request, response){ 
-							 ".OnEvent::rme($this->autocomplete[0], "getACData", array("'$this->name'", "request.term", $this->autocomplete[3]), "function(transport){ response(jQuery.parseJSON(transport.responseText)); }")."
+							 ".OnEvent::rme($this->autocomplete[0], "getACData", array("'$this->name'", "request.term", is_array($this->autocomplete[3]) ? "'".json_encode($this->autocomplete[3])."'" : $this->autocomplete[3]), "function(transport){ response(jQuery.parseJSON(transport.responseText)); }")."
 							 
 						},
-						select: function(event, ui) { var r = OnSelectCallback$this->id(ui.item); ".($this->autocomplete[2] ? "$('$this->id').style.display = 'none';" : "")." return r; }
+						select: function(event, ui) { var r = OnSelectCallback$this->id(ui.item, event); ".($this->autocomplete[2] ? "$('$this->id').style.display = 'none';" : "")." return r; },
+						change: function(event, ui) { var r = OnSelectCallback$this->id(ui.item, event); ".($this->autocomplete[2] ? "$('$this->id').style.display = 'none';" : "")." return r; }
 					}).data(\"ui-autocomplete\")._renderItem = function( ul, item ) {
 						return \$j( \"<li>\" )
 							.data( \"item.ui-autocomplete\", item )
@@ -555,6 +597,7 @@ class HTMLInput {
 					".($this->type == "file" ? "size=\"1\"" : "")."
 					".($this->type == "readonly" ? "readonly=\"readonly\"" : "")."
 					name=\"$this->name\"
+					$data
 					".($this->isDisabled ? "disabled=\"disabled\"" : "")."
 					type=\"".($this->type != "readonly" ? $this->type : "text" )."\"
 					".($this->onchange != null ? "onchange=\"$this->onchange\"" : "")."
@@ -563,14 +606,24 @@ class HTMLInput {
 			break;
 
 			case "option":
-				return "<option".($this->style != null ? " style=\"$this->style\"" : "")." ".($this->isDisabled ? "disabled=\"disabled\"" : "")." ".($this->isSelected ? "selected=\"selected\"" : "")." value=\"$this->value\">$this->name</option>";
+				$data = "";
+				foreach($this->data AS $k => $v)
+					$data .= " data-$k=\"$v\"";
+				
+				return "<option".($this->style != null ? " style=\"$this->style\"" : "")." $data ".($this->isDisabled ? "disabled=\"disabled\"" : "")." ".($this->isSelected ? "selected=\"selected\"" : "")." value=\"$this->value\">$this->name</option>";
 			break;
 
 			case "optgroup":
 				$html = "<optgroup label=\"".htmlentities($this->name)."\">";
 				
-				foreach($this->options AS $k => $v)
+				foreach($this->options AS $k => $v){
+					if(is_object($v)){
+						$v->isSelected(false);
+						if($this->parentValue == $k OR $v->getValue() == $this->parentValue)
+							$v->isSelected(true);
+					}
 					$html .= $v;
+				}
 				
 				$html .= "</optgroup>";
 				
@@ -607,12 +660,20 @@ class HTMLInput {
 				if($this->options != null AND is_array($this->options))
 					foreach($this->options AS $k => $v)
 						if(!is_object($v)) {
-							if($this->type == "select") $isThisIt = ($this->value == $k);
-							else $isThisIt = in_array($k, $values);
+							if($this->type == "select"){
+								$isThisIt = ($this->value == $k);
+								if($this->value."" === "" AND $k."" === "0")
+									$isThisIt = false;
+							} else
+								$isThisIt = in_array($k, $values);
 
 							$html .= "<option ".($isThisIt ? "selected=\"selected\"" : "")." value=\"$k\">$v</option>";
 						}
 						else {
+							if($v->getType() == "optgroup")
+								$v->parentValue($this->value);
+							
+							$v->isSelected(false);
 							if($this->value == $k OR $v->getValue() == $this->value)
 								$v->isSelected(true);
 							$html .= $v;

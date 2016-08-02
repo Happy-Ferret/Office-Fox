@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class HTMLPopupGUI {
 	private $object;
@@ -64,8 +64,9 @@ class HTMLPopupGUI {
 		return $BC."<div style=\"clear:both;\"></div>".$gui->getEditHTML();
 	}
 	
-	public function emptyCheckField($name){
+	public function emptyCheckField($name, $value = null){
 		$this->emptyCheckField = $name;
+		$this->emptyCheckValue = $value;
 	}
 	
 	public function parser($column, $method){
@@ -85,7 +86,7 @@ class HTMLPopupGUI {
 		$TE = new HTMLTable($cols, "Einträge");
 		if($this->showTrash)
 			$TE->setColWidth(1, 20);
-		
+
 		if($this->showEdit){
 			$TE->setColWidth($cols, 20);
 			$TE->useForSelection(false);
@@ -104,14 +105,34 @@ class HTMLPopupGUI {
 			$BD->onclick("deleteClass('".get_class($A)."','".$A->getID()."', function() { ".OnEvent::reloadPopup($this->object->getClearClass())." },'Eintrag wirklich löschen?');");
 
 			$isEmpty = false;
-			if($this->emptyCheckField != null AND $A->A($this->emptyCheckField) == ""){
+			if($this->emptyCheckField != null AND !is_array($this->emptyCheckField) AND $A->A($this->emptyCheckField) == $this->emptyCheckValue){
 				$autoLoad = $action;
 				$isEmpty = true;
 			}
 			
-			if(!$isEmpty)
-				$div = Util::invokeStaticMethod(get_class($this->object), $this->parsers["main"], array($A));#($A->A("TinkerforgeBrickletUID") != "" ? $A->A("TinkerforgeBrickletUID") : "Neuer Eintrag");
-			else
+			if($this->emptyCheckField != null AND is_array($this->emptyCheckField)){
+				$ec = 0;
+				foreach($this->emptyCheckField AS $field){
+					if($A->A($field) != "")
+						continue;
+						
+					$autoLoad = $action;
+					$isEmpty = true;
+					$ec++;
+				}
+				$isEmpty = $ec == count($this->emptyCheckField);
+			}
+			
+			if(!$isEmpty){
+				$obj = get_class($this->object);
+				$meth = $this->parsers["main"];
+				if(strpos($this->parsers["main"], "::")){
+					$ex = explode("::", $this->parsers["main"]);
+					$obj = $ex[0];
+					$meth = $ex[1];
+				}
+				$div = Util::invokeStaticMethod($obj, $meth, array($A));#($A->A("TinkerforgeBrickletUID") != "" ? $A->A("TinkerforgeBrickletUID") : "Neuer Eintrag");
+			} else
 				$div = "Neuer Eintrag";
 			
 			$row = array();
@@ -122,8 +143,17 @@ class HTMLPopupGUI {
 			
 			$row[] = $div;
 			
-			foreach($this->colsRight AS $col)
-				$row[] = Util::invokeStaticMethod(get_class($this->object), $col[0], array($A));
+			foreach($this->colsRight AS $col){
+				$obj = get_class($this->object);
+				$meth = $col[0];
+				if(strpos($col[0], "::")){
+					$ex = explode("::", $col[0]);
+					$obj = $ex[0];
+					$meth = $ex[1];
+				}
+				
+				$row[] = Util::invokeStaticMethod($obj, $meth, array($A));
+			}
 			
 			if($this->showEdit)
 				$row[] = $BE;
@@ -148,7 +178,7 @@ class HTMLPopupGUI {
 		}
 		
 		return "$BA
-			<div style=\"float:right;width:400px;height:500px;display:none;background-color:#f4f4f4;\" id=\"popupEditEntry\"></div>
+			<div style=\"float:right;width:calc(100% - 400px);height:500px;display:none;background-color:#f4f4f4;overflow:auto;\" id=\"popupEditEntry\"></div>
 			<div id=\"popupListEntries\" style=\"width:400px;height:440px;overflow:auto;\">$TE</div>
 			<div style=\"clear:both;\"></div>
 			".($autoLoad ? OnEvent::script($autoLoad) : "");

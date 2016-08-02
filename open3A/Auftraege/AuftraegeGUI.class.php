@@ -15,11 +15,11 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, icontextMenu, iSearchFilter, iCategoryFilter {
 	public static $users = array("" => "unbekannt");
-	public $searchFields = array("firma","nachname","kundennummer");
+	public $searchFields = array("firma",/*"nachname",*/"kundennummer", "CONCAT(vorname, ' ', nachname)");
 	public static $BelegArten;
 	
 	function  __construct() {
@@ -30,6 +30,10 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 	}
 	
 	function getHTML($id, $page){
+		$Users = Users::getUsers();
+		while($U = $Users->getNextEntry())
+			self::$users[$U->getID()] = $U->A("name");
+		
 		$gui = new HTMLGUI2();
 		$gui->VersionCheck("Auftraege");
 		$this->addAssocV3("lieferantennummer", "=", "");
@@ -37,7 +41,8 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		$pSpecData = mUserdata::getPluginSpecificData("Auftraege");
 		
 		if(isset($pSpecData["pluginSpecificCanOnlyEditOwn"]))
-			$this->addAssocV3("t1.UserID","=",$_SESSION["S"]->getCurrentUser()->getID(), "AND", "2");
+			$this->addAssocV3("t1.UserID","=",Session::currentUser()->getID(), "AND", "2");
+		
 		$i = 0;
 		foreach($pSpecData as $key => $value) 
 			if(strstr($key,"pluginSpecificCanSeeAuftraegeFrom"))
@@ -45,28 +50,8 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 			
 			
 		$this->addJoinV3("Adresse","AdresseID","=","AdresseID");
-		#$this->addJoinV3("User","UserID","=","UserID");
-
-		$Users = Users::getUsers();
-		while($U = $Users->getNextEntry())
-			self::$users[$U->getID()] = $U->A("name");
-
-		$gui->showFilteredCategoriesWarning($this->filterCategories(),$this->getClearClass());
-		
-		$gesamt = $this->loadMultiPageMode($id, $page, 0);
-
-		$oldType = ($_SESSION["BPS"]->isPropertySet("mGRLBMGUI","type") ? $_SESSION["BPS"]->getProperty("mGRLBMGUI","type") : -1);
-		$_SESSION["BPS"]->setProperty("mGRLBMGUI","type","-1");
-		
-		$basketBPS = BPS::getAllProperties("multiPrintBasketGUI");
-		
-		$this->addOrderV3("auftragDatum","DESC");
-		if(isset($pSpecData["pluginSpecificCanOnlyEditOwn"])) 
-			$this->addAssocV3("t1.UserID","=",$_SESSION["S"]->getCurrentUser()->getID(), "AND", "2");
-		$i = 0;
-		foreach($pSpecData as $key => $value) 
-			if(strstr($key,"pluginSpecificCanSeeAuftraegeFrom"))
-				$this->addAssocV3("t1.UserID","=",str_replace("pluginSpecificCanSeeAuftraegeFrom","",$key),$i++ == 0 ? "AND" : "OR", "2");
+		if(Session::isPluginLoaded("mProjekt"))
+			$this->addJoinV3("Projekt", "ProjektID", "=", "ProjektID");
 		
 		if(Applications::activeApplication() == "lightCRM"){
 			$this->addAssocV3 ("status", "=", "open", "AND", "3");
@@ -76,6 +61,38 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		if(Applications::activeApplication() == "upFab")
 			$this->addAssocV3 ("status", "=", "delivered", "AND", "3");
 		
+		#Aspect::joinPoint("queryTotal", $this, __METHOD__, array($this));
+
+		$gui->showFilteredCategoriesWarning($this->filterCategories(),$this->getClearClass());
+		
+		$gesamt = $this->loadMultiPageMode($id, $page, 0);
+
+		
+		$oldType = ($_SESSION["BPS"]->isPropertySet("mGRLBMGUI","type") ? $_SESSION["BPS"]->getProperty("mGRLBMGUI","type") : -1);
+		$_SESSION["BPS"]->setProperty("mGRLBMGUI","type","-1");
+		
+		
+		
+		$this->addOrderV3("auftragDatum","DESC");
+		if(isset($pSpecData["pluginSpecificCanOnlyEditOwn"])) 
+			$this->addAssocV3("t1.UserID","=",$_SESSION["S"]->getCurrentUser()->getID(), "AND", "2");
+		
+		$i = 0;
+		foreach($pSpecData as $key => $value) 
+			if(strstr($key,"pluginSpecificCanSeeAuftraegeFrom"))
+				$this->addAssocV3("t1.UserID","=",str_replace("pluginSpecificCanSeeAuftraegeFrom","",$key),$i++ == 0 ? "AND" : "OR", "2");
+		
+			
+		if(Applications::activeApplication() == "lightCRM"){
+			$this->addAssocV3 ("status", "=", "open", "AND", "3");
+			$this->addAssocV3 ("status", "=", "confirmed", "OR", "3");
+		}
+		
+		if(Applications::activeApplication() == "upFab")
+			$this->addAssocV3 ("status", "=", "delivered", "AND", "3");
+		
+		
+		Aspect::joinPoint("queryShow", $this, __METHOD__, array($this));
 		
 		$this->lCV3($id);
 
@@ -89,14 +106,14 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		$gui->tip();
 		$gui->setMultiPageMode($gesamt, $page, 0, "contentRight", str_replace("GUI","",get_class($this)));
 		
-		$gui->setName("Bitte Auftrag auswählen");
-		$gui->setCollectionOf("Auftrag","Auftrag");
+		#$gui->setName("Bitte Auftrag auswählen");
+		$gui->setCollectionOf("Auftrag", "Auftrag");
 		$gui->setShowAttributes(array("firma","bezahlt"));
 		
-
-		$gui->setParser("auftragDatum","Datum::parseGerDate");
-		$gui->setParser("bezahlt","AuftraegeGUI::getPaidImg", array("\$aid",(isset($pSpecData["pluginSpecificCanOnlySeeKalk"]) ? "true" : "false"),(isset($basketBPS["ids"]) ? $basketBPS["ids"] : "")));
-		$gui->setParser("firma","AuftraegeGUI::firmaParser",array("\$sc->nachname","asd","\$sc->vorname", "\$sc->UserID"));
+		
+		#$gui->setParser("auftragDatum","Datum::parseGerDate");
+		$gui->setParser("bezahlt","AuftraegeGUI::getPaidImg", array("\$aid",(isset($pSpecData["pluginSpecificCanOnlySeeKalk"]) ? "true" : "false")));
+		$gui->setParser("firma","AuftraegeGUI::firmaParser",array("\$sc->nachname","asd","\$sc->vorname", "\$sc->UserID", "\$ProjektID", "\$ProjektName", "\$AuftragAdresseNiederlassungID", "\$AuftragAdresseNiederlassungData"));
 
 
 		$gui->setIsDisplayMode(true);
@@ -105,7 +122,6 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 
 
 		$tab = new HTMLSideTable("left");
-
 
 		
 		if(Applications::activeApplication() == "lightCRM"){
@@ -134,7 +150,7 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 
 			$BA1x = $tab->addButton("Auftrag mit\n1x-Adresse", "1xAddress");
 			$BA1x->className("backgroundColor0");
-			$BA1x->onclick("Auftrag.createEmpty(function(){ contentManager.loadFrame('contentRight', 'Adresse', -1, 0, 'AdresseGUI;AuftragID:'+Auftrag.newestID+';displayMode:auftragsAdresse');});");
+			$BA1x->onclick("Auftrag.createEmpty(function(){ contentManager.editInPopup('AuftragAdresse', -1, '1x-Adresse erstellen', 'AuftragAdresseGUI;AuftragID:'+Auftrag.newestID+';displayMode:auftragsAdresse');});");
 			$tab->addRowClass("backgroundColor0");
 			$tab->setRowID("Add1xAdresseButton");
 		}
@@ -230,6 +246,8 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		else
 			$s = $p;
 		
+		$s[2] = BPS::getProperty("multiPrintBasketGUI", "ids", "");
+		
 		if(self::$GRLBMAttributes == null){
 			$GRLBM = new GRLBM(-1);
 			self::$GRLBMAttributes = PMReflector::getAttributesArray($GRLBM->newAttributes());
@@ -256,7 +274,8 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		
 		$t = $GRLBMs->getNextEntry();
 
-		if($t == null) return "keine Belege";
+		if($t == null) 
+			return "keine Belege";
 
 		$g = array();
 		foreach(self::$BelegArten AS $B){
@@ -270,10 +289,24 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		
 		if(array_sum($g) == 1){
 			if($s[2] == ",,") $s[2] = "";
-			$imgs = "<img id=\"addID".$t->getID()."\" style=\"".((!strstr($s[2],",".$t->getID().",") OR $s[2] == "") ? "display:block;":"display:none;")."float:left;\" title=\"zu multiDruck-Liste hinzufügen\" class=\"mouseoverFade\" src=\"./images/i2/notok.gif\" onclick=\"Auftrag.addToMultiPrint('".$t->getID()."');\" />
-	<img id=\"subID".$t->getID()."\" style=\"".((!strstr($s[2],",".$t->getID().",") OR $s[2] == "") ? "display:none;":"display:block;")."float:left;\" class=\"mouseoverFade\" title=\"von multiDruck-Liste entfernen\" src=\"./images/i2/ok.gif\" onclick=\"Auftrag.subFromMultiPrint('".$t->getID()."');\" />";
-
-			return "$imgs<strong>".substr($t->getMyPrefix(), 0, 1).$t->A("nummer")."</strong><br /><small>vom ".Util::CLDateParser($t->A("datum"))."</small>";
+			$BA = new Button("zu multiDruck-Liste hinzufügen", "./images/i2/notok.gif", "icon");
+			$BA->id("addID".$t->getID()."");
+			$BA->style(((!strstr($s[2],",".$t->getID().",") OR $s[2] == "") ? "display:block;":"display:none;")."float:left;");
+			$BA->onclick("Auftrag.addToMultiPrint('".$t->getID()."');");
+			
+			$BR = new Button("von multiDruck-Liste entfernen", "./images/i2/ok.gif", "icon");
+			$BR->id("subID".$t->getID()."");
+			$BR->style(((!strstr($s[2],",".$t->getID().",") OR $s[2] == "") ? "display:none;":"display:block;")."float:left;");
+			$BR->onclick("Auftrag.subFromMultiPrint('".$t->getID()."');");
+			
+			$text = new stdClass();
+			$text->line1 = $t->A("prefix").$t->A("nummer");
+			$text->line2 = "vom ".Util::CLDateParser($t->A("datum"));
+			$text->append = "";
+			
+			Aspect::joinPoint("single", null, __METHOD__, array($BA, $BR, $text, $t));
+			
+			return "$BA$BR<strong>$text->line1</strong><br><small style=\"color:grey;\">$text->line2</small>".$text->append;
 		}
 
 
@@ -315,7 +348,21 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 	
 	public static function firmaParser($w,$l,$p){
 		$s = HTMLGUI::getArrayFromParametersString($p);
-		return ($w == "" ? stripslashes($s[2]).($s[2] != "" ? " " : "").stripslashes($s[0]) : stripslashes($w)).((isset($s[3]) AND isset(self::$users[$s[3]])) ? "<br /><small style=\"color:grey;\">von ".self::$users[$s[3]]."</small>" : "");
+		
+		$name = ($w == "" ? stripslashes($s[2]).($s[2] != "" ? " " : "").stripslashes($s[0]) : stripslashes($w));
+		
+		if($s[6] > 0){
+			$data = json_decode($s[7]);
+			$name .= "<br><small style=\"color:grey;\">".$data->AdresseNiederlassungOrt."</small>";
+		}
+		
+		$name .= ((isset($s[3]) AND isset(self::$users[$s[3]])) ? "<br><small style=\"color:grey;\">von ".self::$users[$s[3]]."</small>" : "");
+		
+		
+		if($s[4] > 0)
+			$name .= "<br><small style=\"color:grey;\">$s[5]</small>";
+		
+		return $name;
 	}
 	
 	public static function parseRnr($w,$l,$p){
@@ -337,7 +384,7 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 		
 		$gui = new HTMLGUI();
 		$searchByNumber = false;
-		if($query{0} == "#" AND isset($query{1}) AND (strpos("RLKAGBW", $query[1]) !== false)){
+		if($query{0} == "#" AND isset($query{1}) AND (strpos("RLKAGBW", strtoupper($query[1])) !== false)){
 			$searchByNumber = true;
 			$isWhat = 1;
 			$query = str_replace("#","", $query);
@@ -355,10 +402,26 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 			$gui->setParser("nummer", "AuftraegeGUI::parseRnr", array($query{0}));
 		}
 		
+		$_SESSION["BPS"]->registerClass("HTMLGUI");
+		$_SESSION["BPS"]->setACProperty("targetFrame","contentLeft");
+		$_SESSION["BPS"]->setACProperty("targetPlugin","Auftrag");
+					
+		$gui->setShowAttributes(array("firma","nummer"));
+
+		$gui->setParser("firma","AuftraegeGUI::firmaParser", array("\$sc->nachname","asd","\$sc->vorname", "\$sc->UserID", "\$ProjektID", "\$ProjektName", "\$AuftragAdresseNiederlassungID", "\$AuftragAdresseNiederlassungData"));
+		$gui->setParser("nummer","AuftraegeGUI::nummerParser", array("\$sc->datum", "\$sc->GRLBMID"));
+
+		
 		$searchByReference = false;
 		if($query{0} == "?"){
 			$query = str_replace("?","", $query);
 			$searchByReference = true;
+		}
+		
+		$searchByProjekt = false;
+		if($query{0} == "*" AND Session::isPluginLoaded("mProjekt")){
+			$query = str_replace("*","", $query);
+			$searchByProjekt = true;
 		}
 		
 		$searchByDate = false;
@@ -400,16 +463,15 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 						if($datum != -1) $ASH->addAssocV3("datum",">=", $datum);
 						if($datum2 != -1) $ASH->addAssocV3("datum","<=", $datum2);
 						
-						$html = "<p style=\"padding:3px;\"><img src=\"./images/i2/note.png\" style=\"float:left;margin-right:3px;\" /> Es werden nur A/L/R/G/K angezeigt, die ".($datum != -1 ? "<strong>ab</strong> dem $d" : "").(($datum != -1 AND $datum2 != -1) ? " und " : "").($datum2 != -1 ? "<strong>vor</strong> dem $d2" : "")." erstellt wurden.</p>";
+						$html = "<p style=\"padding:3px;\"><img src=\"./images/i2/note.png\" style=\"float:left;margin-right:3px;\" /> Es werden nur Belege angezeigt, die ".($datum != -1 ? "<strong>ab</strong> dem $d" : "").(($datum != -1 AND $datum2 != -1) ? " und " : "").($datum2 != -1 ? "<strong>vor</strong> dem $d2" : "")." erstellt wurden.</p>";
 					}
 				}
 				
 				
 				if(!$searchByDate AND !$searchByNumber AND !$searchByCID AND !$searchByReference AND $d == null){
-					$html = "<p style=\"padding:3px;\"><img src=\"./images/i2/note.png\" style=\"float:left;margin-right:3px;\" /><small>Aus Gründen der Performance werden nur die Aufträge der letzten 6 Wochen durchsucht. Bitte stellen Sie manuell ein Datum ein, um dies zu überschreiben.</small></p>";
-					$ASH->addAssocV3("datum",">=", time() - 6 * 7 * 24 * 3600);
+					$html = "<p style=\"padding:3px;\"><img src=\"./images/i2/note.png\" style=\"float:left;margin-right:3px;\" /><small>Aus Gründen der Performance werden nur die Aufträge der letzten 3 Monate durchsucht. Bitte stellen Sie manuell ein Datum ein, um dies zu überschreiben.</small></p>";
+					$ASH->addAssocV3("datum",">=", time() - 3 * 4 * 7 * 24 * 3600);
 				}
-				
 				
 				if($searchByNumber)
 					$ASH->addAssocV3("nummer","LIKE","%".substr($query,1)."%","AND","1");
@@ -419,13 +481,31 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 					$ASH->addAssocV3("kundennummer", "LIKE", "%$query%", $k == 0 ? "AND" : "OR", "1");
 					$ASH->addGroupV3("AuftragID");
 				}
-				
+				elseif($searchByProjekt){ //Findet auch Aufträge ohne Beleg
+					$AC = anyC::get("Projekt");
+					$AC->addJoinV3("Auftrag", "ProjektID", "=", "ProjektID");
+					$AC->addJoinV3("Adresse","t2.AdresseID","=","AdresseID");
+
+					$AC->setLimitV3("10");
+					$AC->addOrderV3("auftragDatum","DESC");
+					
+					$fields = array("nachname", "auftragDatum AS datum", "t2.AuftragID", "t1.ProjektID", "ProjektName","firma","vorname", "t2.UserID", "AuftragAdresseNiederlassungID", "AuftragAdresseNiederlassungData");
+					$AC->setFieldsV3($fields);
+					
+					$AC->addAssocV3("ProjektName", "LIKE", "%$query%", "AND", "1");
+					$AC->lCV3();
+					
+					$gui->setObject($AC);
+					$gui->customize($this->customizer);
+
+					die($gui->getACHTMLBrowser("quickSearchLoadFrame", true, null, "AuftragID"));
+				}
 				elseif($searchByReference)
 					$ASH->addAssocV3("GRLBMReferenznummer", "=", $query, "AND", "1");
 				
-				elseif($searchByDate){
+				elseif($searchByDate)
 					$ASH->addAssocV3("t3.datum", "=", Util::CLDateParser($query, "store"), "AND", "1");
-				}
+				
 				
 				else {
 					foreach($this->searchFields AS $k => $field)
@@ -438,7 +518,6 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 					#	$ASH->addAssocV3($field, "LIKE", "%$q2%", "OR", "1");
 					
 					
-				
 				$ASH->addOrderV3("datum","DESC");
 				$ASH->lCV3();
 				
@@ -455,15 +534,6 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 				$ASH->resetPointer();
 				
 				$gui->setObject($ASH);
-				$gui->setShowAttributes(array("firma","nummer"));
-				
-				$gui->setParser("firma","AuftraegeGUI::firmaParser", array("\$sc->nachname","asd","\$sc->vorname", "\$sc->UserID"));
-				$gui->setParser("nummer","AuftraegeGUI::nummerParser", array("\$sc->datum", "\$sc->GRLBMID"));
-				
-				$_SESSION["BPS"]->registerClass("HTMLGUI");
-				$_SESSION["BPS"]->setACProperty("targetFrame","contentLeft");
-				$_SESSION["BPS"]->setACProperty("targetPlugin","Auftrag");
-
 				$gui->customize($this->customizer);
 
 				echo $html.$gui->getACHTMLBrowser("quickSearchLoadFrame");
@@ -473,7 +543,7 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 	
 	public static function nummerParser($w, $l, $p){
 		$s = HTMLGUI::getArrayFromParametersString($p);
-		return self::$prefixes[$s[1]].$w."<br /><small>".date("d.m.Y",$s[0]+0)."</small>";
+		return self::$prefixes[$s[1]].$w."<br><small>".date("d.m.Y",$s[0]+0)."</small>";
 	}
 	
 	public function getContextMenuHTML($identifier){
@@ -491,22 +561,25 @@ class AuftraegeGUI extends Auftraege implements iGUIHTMLMP2, iAutoCompleteHTML, 
 			<input src=\"./images/i2/save.gif\" style=\"width:18px;border:0px;\" onclick=\"rme('mUserdata','','setUserdata',new Array('auftraegeMaxDate',$('auftraegeMaxDate').value),'showMessage(\'gespeichert\')');\" type=\"image\" />
 			<input src=\"./images/i2/delete.gif\" style=\"width:18px;border:0px;\" onclick=\"rme('mUserdata','','delUserdata',new Array('auftraegeMaxDate'),'showMessage(\'gelöscht\');$(\'auftraegeMaxDate\').value = \'\';');\" type=\"image\" />
 		</p>
-		<p style=\"margin-top:10px;padding:5px;\">Es werden folgende Felder durchsucht:<br /><br />Firma<br />Kundennummer<br />Nachname<br /><br />Um eine Rechnung zu finden, suchen Sie z.B. nach '#R070010'.<br />Lieferschein: '#L...',<br />Gutschein: '#G...',<br />Angebot: '#A...',<br />Bestätigung: '#B...' und<br />Kalkulation: '#K...'</p>
+		<p style=\"margin-top:10px;padding:5px;\">Es werden folgende Felder durchsucht:<br><br>Firma<br>Kundennummer<br>Vorname und Nachname<br><br>Um eine Rechnung zu finden, suchen Sie z.B. nach '#R070010'.<br />Lieferschein: '#L...',<br />Gutschein: '#G...',<br />Angebot: '#A...',<br />Bestätigung: '#B...' und<br />Kalkulation: '#K...'</p>
 		
-		<p style=\"margin-top:10px;padding:5px;\">Um nach einer Referenznummer zu suchen, beginnen Sie die Suche mit einem '?'. Also zum Beispiel '?300' findet den Beleg mit der Referenznummer 300.</p>
+		<p style=\"margin-top:10px;padding:5px;\">Um nach einer Referenznummer zu suchen, beginnen Sie die Suche mit einem '?'. Also zum Beispiel '?300' findet den Beleg mit der Referenznummer 300.</p>";
+		
+		if(Session::isPluginLoaded("mProjekt"))
+			echo "<p>Eine Projektnummer finden Sie mit vorangestelltem *.";
 
-		<p><img src=\"./images/i2/searchFilter.png\" style=\"float:left;margin-right:5px;\" /> Das Ergebnis der Filterung nach einem Suchbegriff weicht vom Ergebnis der Schnellsuche ab.";
+		echo "<p><img src=\"./images/i2/searchFilter.png\" style=\"float:left;margin-right:5px;\" /> Das Ergebnis der Filterung nach einem Suchbegriff weicht vom Ergebnis der Schnellsuche ab.";
 
 	}
 	
 	public function getSearchedFields(){
-		return array("firma","vorname","nachname", "kundennummer");
+		return array("firma", "CONCAT(vorname, ' ', nachname)", "kundennummer");
 	}
 	
 	public function saveContextMenu($identifier, $key){}
 
-	public function createEmpty($addBeleg = null){
-		echo parent::createEmpty($addBeleg);
+	public function createEmpty($addBeleg = null, $AdresseID = null){
+		echo parent::createEmpty($addBeleg, $AdresseID);
 	}
 }
 ?>

@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Jahr4Nummer extends Auftrag implements iReNr {
 	
@@ -30,15 +30,23 @@ class Jahr4Nummer extends Auftrag implements iReNr {
 		$_SESSION["BPS"]->setActualClass("mGRLBMGUI");
 		$_SESSION["BPS"]->setACProperty("type",$type);
 		$n = new mGRLBMGUI();
+		$n->addAssocV3("DATE_FORMAT(FROM_UNIXTIME(datum), '%Y')", "=", date("Y"));
 		
 		$re_nr = $n->getIncrementedField("nummer");
-		if($re_nr - 1 < $startNumber) $re_nr = $startNumber;
-		if($re_nr == 1) $re_nr = $startNumber;
 		
-		if($jahr < 10) $re_nr = "0".$re_nr;
+		if($re_nr - 1 < $startNumber) 
+			$re_nr = $startNumber;
+		
+		if($re_nr == 1) 
+			$re_nr = $startNumber;
+		
+		if($jahr < 10) 
+			$re_nr = "0".$re_nr;
 		
 		$re_nr2 = $re_nr."";
-		if($jahr > $re_nr2{0}.$re_nr2{1}) $re_nr = $startNumber;
+		if($jahr > $re_nr2{0}.$re_nr2{1}) 
+			$re_nr = $startNumber;
+		
 		return $re_nr;
 	}
 }

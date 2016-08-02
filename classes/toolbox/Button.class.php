@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Button {
 	
@@ -64,7 +64,14 @@ class Button {
 		$this->rme = null;
 		$this->before = null;
 		
+		if($rme == "")
+			$rme = $this->onclick;
+		
 		return $rme;
+	}
+	
+	function getLabel(){
+		return $this->label;
 	}
 	
 	function label($label){
@@ -160,11 +167,15 @@ class Button {
 		$this->onclick = "contentManager.newSession('$physionName', '$application', '$plugin', ".(isset($_SESSION["phynx_customer"]) ? "'".$_SESSION["phynx_customer"]."'" : "''").", '".($title != null ? $title : "")."', '".($icon != null ? $icon : "")."');";
 	}
 	
-	function select($isMultiSelection, $selectPlugin, $callingPlugin, $callingPluginID, $callingPluginFunction){
+	function select($isMultiSelection, $selectPlugin, $callingPlugin, $callingPluginID, $callingPluginFunction, $addBps = ""){
 		#$this->rme = " contentManager.rightSelection(".($isMultiSelection ? "true" : "false").", '$pluginRight','$pluginLeftID','$calledPlugin','$calledPluginID','$calledPluginFunction');";
 		#isMultiSelection, selectPlugin, callingPlugin, callingPluginID, callingPluginFunction
-		$this->rme = "contentManager.backupFrame('contentRight','selectionOverlay'); contentManager.rightSelection(".($isMultiSelection ? "true" : "false").", '$selectPlugin','$callingPlugin','$callingPluginID','$callingPluginFunction');";
+		$this->rme = "contentManager.backupFrame('contentRight','selectionOverlay'); contentManager.rightSelection(".($isMultiSelection ? "true" : "false").", '$selectPlugin','$callingPlugin','$callingPluginID','$callingPluginFunction', '$addBps');";
 
+	}
+	
+	function sidePanel($targetClass, $targetClassId, $targetMethod, $targetMethodParameters = "", $popupName = "edit"){
+		$this->onclick(OnEvent::popupSidePanel($targetClass, $targetClassId, $targetMethod, $targetMethodParameters, $popupName));
 	}
 
 	function leftSelect($isMultiSelection, $selectPlugin, $callingPlugin, $callingPluginID, $callingPluginFunction){
@@ -214,14 +225,14 @@ class Button {
 		$this->rme = "contentManager.rmePCR('$targetClass', '$targetClassId', '$targetMethod', [".(is_array($targetMethodParameters) ? implode(",",$targetMethodParameters) : "'".$targetMethodParameters."'")."], $onSuccessFunction, '$bps', ".($doResponseCheck ? "true" : "false")." ".($onFailureFunction != "" ? ", $onFailureFunction" : "").");";
 	}
 
-	function settings($plugin, $identifier = ""){
+	function settings($plugin, $identifier = "", $leftOrRight = "right"){
 		$this->settings = $B = new Button("Einstellungen", "wrench", "iconic");
 
 		if(strpos($this->style, "float:right;") !== false)
 			$B->style("float:right;margin-right:-22px;");
 		else
 			$B->style("margin-left:4px;margin-bottom:15px;");
-		$B->contextMenu($plugin, $identifier, "Einstellungen:");
+		$B->contextMenu($plugin, $identifier, "Einstellungen:", $leftOrRight);
 		
 		$B->className("buttonSettings iconicG");
 		
@@ -233,7 +244,7 @@ class Button {
 	}
 	
 	function loadPlugin($target, $plugin, $bps = "", $withId = null, $options = "{}"){
-		$this->rme = "contentManager.loadPlugin('$target', '$plugin', '$bps'".($withId != null ? ", $withId" : "").", $options);";
+		$this->rme = "contentManager.loadPlugin('$target', '$plugin', '$bps'".($withId != null ? ", $withId" : ", null").", $options);";
 	}
 	
 	function onclick($value){
@@ -246,7 +257,10 @@ class Button {
 	
 	function windowRme($targetClass, $targetClassId, $targetMethod, $targetMethodParameters = "", $bps = "", $target = "window"){
 		$this->rme = "windowWithRme('$targetClass', '$targetClassId', '$targetMethod', Array(".(is_array($targetMethodParameters) ? implode(",",$targetMethodParameters) : "'".$targetMethodParameters."'")."), '$bps', '$target');";
-		
+	}
+	
+	function windowRmeP($targetClass, $targetClassId, $targetMethod, $targetMethodParameters = "", $bps = "", $target = "window"){
+		$this->rme = "windowWithRmeP('$targetClass', '$targetClassId', '$targetMethod', Array(".(is_array($targetMethodParameters) ? implode(",",$targetMethodParameters) : "'".$targetMethodParameters."'")."), '$bps', '$target');";
 	}
 
 	/**
@@ -292,9 +306,17 @@ class Button {
 		if($this->image != "" AND $this->image[0] != "." AND strpos($this->image, ":") === false AND $this->image[0] != "/" AND $this->type != "iconic" AND $this->type != "seamless" AND $this->type != "touch")
 			$this->image = "./images/navi/$this->image.png";# : $this->image );
 
+		if(defined("PHYNX_USE_SVG") AND PHYNX_USE_SVG AND file_exists(Util::getRootPath().str_replace(array(".png", ".gif"), ".svg", $this->image))){
+			$this->image = str_replace(array(".png", ".gif"), ".svg", $this->image);
+			#if($this->type == "icon")
+			#	$this->style .= "width:32px;";
+			if($this->type == "bigButton" OR $this->type == "LPBig" OR $this->type == "MPBig")
+				$this->style .= "background-size:32px;";
+		}
+		
 		$onclick = $this->onclick != null ? $this->onclick : "";
 		#if($this->pluginRight != null) $onclick .= ;
-		if($this->rme != null OR $onclick != "") $onclick .= (mb_substr($onclick, -1) != ";" ? ";" : "")." { ".($this->loading ? "\$j(this).addClass('loading');" : "")." ".$this->rme." }";
+		if($this->rme != null OR $onclick != "") $onclick .= ((mb_substr($onclick, -1) != ";" AND strpos($onclick, "confirm(") === false) ? ";" : "")." { ".($this->loading ? "\$j(this).addClass('loading');" : "")." ".$this->rme." }";
 		if($this->type == "bigButton" OR $this->type == "LPBig" OR $this->type == "MPBig")
 			return (strpos($this->style, "float:right;") !== false ? $this->settings : "")."<button".($this->name != null ? " name=\"$this->name\"" : "")." ".($this->disabled ? "disabled=\"disabled\"" : "")." ".($this->id ? "id=\"$this->id\" " : "")."onclick=\"$onclick\" type=\"button\" class=\"$this->class ".($this->type == "bigButton" ? "bigButton" : ($this->type == "LPBig" ? "bigButton LPBigButton" : "bigButton MPBigButton"))."\" style=\"{$this->style}".($this->image != "" ? "background-image:url(".$this->image.");" : "")."\" title=\"$this->label\">".(($this->type == "bigButton" OR $this->type == "MPBig") ? nl2br($this->label) : "")."</button>".(strpos($this->style, "float:right;") === false ? $this->settings : "")."$this->js";
 		

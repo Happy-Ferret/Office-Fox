@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 
@@ -34,13 +34,14 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 	}
 	
 	public static function getNewPostenButton($GRLBMID, $kundennummer, $lieferantennummer = null){
-		$addBPS = "";
-		$addBPS .= (($kundennummer != "" AND $kundennummer > 0) ? "kundennummer:$kundennummer" : "");
-		$addBPS .= (($lieferantennummer != null AND $lieferantennummer != "0") ? ($addBPS != "" ? ";" : "")."lieferantFilter:$lieferantennummer" : "");
+		$addBPS = "addBefore:-1";
+		$addBPS .= (($kundennummer != "" AND $kundennummer > 0) ? ";kundennummer:$kundennummer" : "");
+		$addBPS .= (($lieferantennummer != null AND $lieferantennummer != "0") ? ";lieferantFilter:$lieferantennummer" : "");
 		
 		$BPosten = new Button("Artikel\nhinzufügen", "package");
 		$BPosten->customSelect("contentRight", $GRLBMID, "mArtikel", "Auftrag.addArtikel", $addBPS);
 		$BPosten->id("grlbmAddArtikel");
+		
 		return $BPosten;
 	}
 	
@@ -55,7 +56,17 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 	function getHTML($id){
 		$bps = $this->getMyBPSData();
 		$this->GRLBM = $GRLBM = new GRLBM($bps["loadGRLBMID"]);
-
+		
+		$pSpecData = mUserdata::getPluginSpecificData("Auftraege");
+		if(isset($pSpecData["pluginSpecificRLocksAuftrag"]) AND $GRLBM->getMyPrefix() != "R"){
+			$AC = anyC::get("GRLBM", "AuftragID", $GRLBM->A("AuftragID"));
+			$AC->addAssocV3("isR", "=", "1");
+			$AC->setLimitV3(1);
+			$R = $AC->n();
+			if($R)
+				$GRLBM->changeA("isPayed", "1");
+		}
+		
 		// <editor-fold defaultstate="collapsed" desc="Aspect:jP">
 		try {
 			$MArgs = array($id, $GRLBM);
@@ -84,10 +95,11 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			$showPrices = false;
 		
 		$message = array();
-		$message["R"] = "Diese Rechnung wurde als bezahlt makiert und kann daher nicht mehr bearbeitet werden.";
-		$message["G"] = "Diese Gutschrift wurde als bezahlt makiert und kann daher nicht mehr bearbeitet werden.";
-		$message["B"] = "Für dieses Angebot wurde eine Auftragsbestätigung erstellt. Die Posten können daher nicht mehr verändert werden.";
-		$message["A"] = $message["B"];
+		$message["R"] = "Diese Rechnung wurde als bezahlt markiert und kann daher nicht mehr bearbeitet werden.";
+		$message["G"] = "Diese Gutschrift wurde als bezahlt markiert und kann daher nicht mehr bearbeitet werden.";
+		$message["B"] = "Diese Auftragsbestätigung wurde gesperrt.";
+		$message["A"] = "Für dieses Angebot wurde eine Auftragsbestätigung erstellt. Die Posten können daher nicht mehr verändert werden.";
+		$message["L"] = "Dieser Lieferschein wurde gesperrt.";
 
 		if($bps["GRLBMType"] == "Kalk" AND $view < 3) $view = 3;
 		#print_r($this->getMyBPSData());
@@ -97,7 +109,8 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 		$PostenAttributes = $tempPosten->newAttributes();
 		
 		//Be sure this field exists else the Rechnung will show 0,00€ total
-		if(!isset($PostenAttributes->bruttopreis)) throw new FieldDoesNotExistException("bruttopreis","");
+		if(!isset($PostenAttributes->bruttopreis))
+			throw new FieldDoesNotExistException("bruttopreis","");
 		
 		unset($tempPosten);
 		$PostenAttributes = PMReflector::getAttributesArrayAnyObject($PostenAttributes);
@@ -129,12 +142,10 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 		#$B1Posten->settings("mPosten", "100:$bps[loadGRLBMID]");
 
 		$L = new HTMLList();
-		$L->setItemsStyle("display:inline-block;margin-top:0px;margin-right:15px;");
+		$L->setItemsStyle("display:inline-block;margin-top:0px;margin-right:15px;vertical-align:top;margin-left:0;");
 		$L->addListStyle("list-style-type:none;");
 		
 		$L->addItem($BPosten);
-		$L->addItemStyle("margin-left:10px;");
-		
 		$L->addItem($B1Posten);
 		
 		Aspect::joinPoint("PostenSideTable", $this, __METHOD__, array($GRLBM, $L, $Auftrag));
@@ -142,19 +153,19 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 		
 		$IPosten = new HTMLInput("addPostenFromArtikel");
 		$IPosten->placeholder("Artikelsuche...");
-		$IPosten->style("width:150px;");
+		$IPosten->style("width:130px;");
 		$IPosten->autocomplete("mArtikel", "function(selection){ Auftrag.addArtikel('".$bps["loadGRLBMID"]."', selection.ArtikelID, function(){ \$j('[name=addPostenFromArtikel]').trigger('focus'); }) }");
-		$IPosten->onEnter(OnEvent::rme($this, "findArtikel", array("this.value"), "function(t){ if(t.responseText == '') return; Auftrag.addArtikel('".$bps["loadGRLBMID"]."', t.responseText, function(){ \$j('[name=addPostenFromArtikel]').trigger('focus'); }) }"));
-		$L->addItem($IPosten);
+		$IPosten->onkeyup("if(event.keyCode == 38 || event.keyCode == 40) Auftrag.skipEnter = true; else if(event.keyCode != 13) Auftrag.skipEnter = false; if(event.keyCode == 13 && !Auftrag.skipEnter) ".OnEvent::rme($this, "findArtikel", array("this.value"), "function(t){ if(t.responseText == '') return; Auftrag.addArtikel('".$bps["loadGRLBMID"]."', t.responseText, function(){ \$j('[name=addPostenFromArtikel]').trigger('focus'); }) }"));
+		$L->addItem("<div style=\"margin-top:10px;\">$IPosten</div>");
+
 		
 		$T = "";
 		if($this->showPostenTable)
 			if($GRLBM->A("isPayed") == "0") 
-				$T .= "<div style=\"\" class=\"AuftragBelegContent\">".$L."</div>";
+				$T .= "<div style=\"padding-left:10px;\" class=\"AuftragBelegContent\">".$L."</div>";
 			else{
 				$unlock = "";
-				$pSpecData = mUserdata::getPluginSpecificData("Auftraege");
-				if(isset($pSpecData["pluginSpecificCanSetPayed"])) 
+				if(isset($pSpecData["pluginSpecificCanSetPayed"]) AND isset($pSpecData["pluginSpecificCanRemovePayed"]))
 					$unlock = "<span style=\"float:right;\"><a href=\"#\" onclick=\"".OnEvent::rme($GRLBM, "setPayed", array("'false'"), "function(){ Auftrag.reloadBeleg(".$GRLBM->getID().") }")." return false;\" style=\"color:grey;\">Markierung aufheben</a></span>";
 				
 				$T .= "<p class=\"highlight\" style=\"margin-right:10px;\">$unlock".$message[$bps["GRLBMType"]]."</p>";
@@ -163,7 +174,8 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 		$BOP = new Button("Operationen", "wrench", "iconicG");
 		$BOP->onclick("phynxContextMenu.start(this, 'mPosten','100:$bps[loadGRLBMID]','Optionen anzeigen:');");
 		$BOP->style("margin-top:5px;margin-left:5px;");
-		$html = "<div style=\"clear:right;padding-top:60px;\" class=\"prettySubtitle\">Posten von ".$GRLBM->A("prefix").$GRLBM->A("nummer")."$BOP</div>$T<div class=\"Tab backgroundColor1\" style=\"font-weight:bold;\"><p>".Stammdaten::getLongType($bps["GRLBMType"],true)."posten:"."</p></div>";
+		
+		$html = Aspect::joinPoint("prepend", $this, __METHOD__, $MArgs, "")."<div style=\"clear:right;padding-top:60px;\" class=\"prettySubtitle\">Posten von ".$GRLBM->A("prefix").$GRLBM->A("nummer")."$BOP</div>$T<div class=\"Tab backgroundColor1\" style=\"font-weight:bold;\"><p>".Stammdaten::getLongType($bps["GRLBMType"],true)."posten:"."</p></div>";
 
 		#$tabC1 = new HTMLTable(2);
 		#$tabC1->addTableClass("AuftragBelegContent");
@@ -249,13 +261,24 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 				$divC1 .= $this->belegAction("Excel-Datei importieren", $FUGL);
 			}
 			
-			if(Session::isPluginLoaded("mLager") AND $GRLBM->getMyPrefix() != "O"){
+			if(Session::isPluginLoaded("mLager") AND $GRLBM->getMyPrefix() != "O" AND !Session::isPluginLoaded("mLagerbestandWare")){
 				$IL = new HTMLInput("lager", "select", mUserdata::getUDValueS("userMainLager", "0"));
 				$IL->setOptions(anyC::get("Lager"), "LagerName", "Standardlager", array("-1" => "Ohne Lagerbuchung"));
 				$IL->onchange(OnEvent::rme("mUserdata", "setUserdata", array("'userMainLager'", "this.value")));
 				#$tabC1->addLV("Entnahme aus:", $IL);
 				
 				$divC1 .= $this->belegAction("Warenentnahme aus", $IL);
+			}
+			
+			if(Session::isPluginLoaded("mEingangsbeleg") AND Session::isPluginLoaded("mProjekt")){
+				$AC = anyC::get("Eingangsbeleg", "EingangsbelegOriginClass", "Projekt");
+				$AC->addAssocV3("EingangsbelegOriginClassID", "=", $Auftrag->A("ProjektID"));
+				$AC->setLimitV3(1);
+				$E = $AC->n();
+				
+				$BE = new Button("Belege\nanzeigen", "./openFiBu/Eingangsbeleg/Eingangsbeleg.png");
+				$BE->popup("", "Eingangsbelege", "mEingangsbeleg", -1, "addToRechnungPopup", array("'Projekt'", $Auftrag->A("ProjektID"), $GRLBM->getID()));
+				$divC1 .= $this->belegAction("Eingangsrechnungen", !$E ? "Keine Belege" : $BE);
 			}
 			
 			if(Session::isPluginLoaded("Abschlussrechnung") AND $GRLBM->getMyPrefix() == "R" AND $this->numLoaded() == 0){
@@ -329,14 +352,33 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			$Belege = $this->getCopyBelege($GRLBM);
 		
 			if($Belege->numLoaded() > 0){
+				$BC = new Button("Auswahl\nkopieren", "seiten");#OnEvent::rme($GRLBM, "copyFromMulti", array("joinFormFieldsToString('AuftragCopyBelege')"))
+				$BC->rmePCR("GRLBM", $GRLBM->getID(), "copyPostenFromMulti", array("joinFormFieldsToString('AuftragCopyBelege')"), "function(){ contentManager.loadFrame('subframe', 'GRLBM', ".$GRLBM->getID()."); }");
+				$BC->style("margin-right:5px;");
+				$BC->disabled(true);
+				$BC->id("AuftragCopyBelegeButton");
+				$BC->className("backgroundColor0");
+				
+				$BI = new Button("Alle\nauswählen", "new");
+				$BI->style("margin-right:10px;");
+				$BI->onclick("\$j('#AuftragCopyBelege input').prop('checked', true).trigger('change');");
+				$BI->className("backgroundColor0");
+				
+				$BN = new Button("Keinen\nauswählen", "clear");
+				$BN->style("margin-right:10px;");
+				$BN->onclick("\$j('#AuftragCopyBelege input').prop('checked', false).trigger('change');");
+				$BN->className("backgroundColor0");
+				
 				#$tabC2->addRow(array("",""));
 				#$tabC2->addRowClass("backgroundColor0");
-				$divC2 = "<div class=\"spell\"><p class=\"backgroundColor3\" style=\"margin-bottom:5px;\">";
+				$divC2 = "<div class=\"spell\"><p class=\"backgroundColor3\">";
 				if($GRLBM->getMyPrefix() != "O" AND $GRLBM->getMyPrefix() != "P")
 					$divC2 .= "Posten aus Beleg aus diesem Auftrag kopieren";
 				else
 					$divC2 .= "Aktuelle Angebote und Auftragsbestätigungen";
-				$divC2 .= "</p>";
+				
+				
+				$divC2 .= "</p><div class=\"backgroundColor4\" style=\"margin-bottom:10px;padding:5px;\">$BI$BN$BC<div style=\"clear:both;\"></div></div><div style=\"max-height:300px;overflow:auto;\"><form id=\"AuftragCopyBelege\">";
 				#$tabC2->addRowClass("backgroundColor0");
 				#$tabC2->addRowColspan(1, 2);
 			}
@@ -358,7 +400,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 					$auftragName = $Adresse->getShortAddress();
 				}
 				
-				$divC2 .= mGRLBMGUI::belegBox($B, "Auftrag.copyPostenFrom('".$B->getID()."','".$GRLBM->getID()."','','subframe');", $auftragName);
+				$divC2 .= mGRLBMGUI::belegBox($B, "Auftrag.copyPostenFrom('".$B->getID()."','".$GRLBM->getID()."','','subframe');", $auftragName, "if(\$j('#AuftragCopyBelege input:checked').length) \$j('#AuftragCopyBelegeButton').prop('disabled', false).addClass('highlight'); else \$j('#AuftragCopyBelegeButton').prop('disabled', true).removeClass('highlight');");
 				
 				#$pre = $B->getMyPrefix();
 				#$tabC2->addRow(array(
@@ -368,7 +410,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			}
 			
 			if($Belege->numLoaded() > 0)
-				$divC2 .= "</div>";
+				$divC2 .= "</form></div></div>";
 		}
 
 		$html .= $divC1."<div id=\"copyList\" style=\"margin-left:10px;width:95%;".(($this->numLoaded() == 0 OR $view == 4) ? "" : "display:none;")."\">".$divC2."</div>"."
@@ -391,23 +433,20 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			if(is_array($postenButtons))
 				$postenButtons = implode("", $postenButtons);
 
+			if($t->A("PostenHasKalkulation")){
+				$B = new Button("Kalkulation anzeigen", "./ubiquitous/PostenKalkulation/showKalkulation.png", "icon");
+				$B->style("float:right;margin-right:10px;");
+				$B->popup("", "Kalkulation", "mPostenKalkulation", "-1", "getKalkulation", array("'GRLBM'", $t->A("GRLBMID"), "", $t->getID()), "", "{hPosition: 'center', width:1000, top:30, blackout: true}");
+				$postenButtons .= $B;
+			}
+			
 			#<img style=\"float:right;\" class=\"calendarIcon mouseoverFade\" style=\"margin-right:0px;\" src=\"./images/i2/delete.gif\" onclick=\"\"/>
-			$BSettings = new Button("Optionen","./images/i2/settings.png", "icon");
+			/*$BSettings = new Button("Optionen","./images/i2/settings.png", "icon");
 			$BSettings->className("postenOptionsButton");
 			$BSettings->style("float:right;margin-right:20px;");
 			$BSettings->onclick("if($('optionsPosten".$t->getID()."').style.display == 'none') $('optionsPosten".$t->getID()."').style.display = ''; else $('optionsPosten".$t->getID()."').style.display = 'none';");
 			if(!$postenOptions["fold"])
-				$BSettings = "";
-
-			$BTrash = new Button("Posten löschen","./images/i2/delete.gif");
-			$BTrash->type("icon");
-			$BTrash->style("float:right;margin-right:10px;");
-			$BTrash->onclick("deleteClass('Posten','".$t->getID()."',function() { $('PostenDisplayD".$t->getID()."1').style.display='none'; $('PostenDisplayD".$t->getID()."2').style.display='none'; if($('PostenDisplayD".$t->getID()."4')) $('PostenDisplayD".$t->getID()."4').style.display='none'; $('PostenDisplayD".$t->getID()."3').style.display='none'; $('optionsPosten".$t->getID()."').style.display='none'; Auftrag.updateNettoBrutto(".$t->A("GRLBMID").", ".$t->getID()."); },'Posten wirklich löschen?');");
-
-			$BEdit = new Button("Posten bearbeiten","./images/i2/edit.png");
-			$BEdit->type("icon");
-			$BEdit->style("float:right;margin-right:20px;");
-			$BEdit->onclick("contentManager.editInPopup('Posten', '{$t->getID()}', 'Posten bearbeiten');");
+				$BSettings = "";*/
 
 			if($ta->isBrutto == "1") {
 				$ta->preis = Util::CLNumberParserZ($ta->bruttopreis);
@@ -434,35 +473,48 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			Aspect::joinPoint("abovePosten", $this, __METHOD__, array($TP, $t));
 			
 			/**
-			 * ROW 2
-			 */
-			$TP->addRow(array($BEdit.$BTrash.$postenButtons));
-			$TP->addRowColspan(1, 4);
-			$TP->setRowID("optionsPosten".$t->getID());
-			$TP->addRowStyle(!$postenOptions["fold"] ? "" : "display:none;");
-			#$TP->addRowClass("backgroundColor0");
-			
-			/**
 			 * ROW 1
 			 */
+			$TP->addRow(array($postenButtons));
+			$TP->addRowColspan(1, 4);
+			$TP->setRowID("optionsPosten".$t->getID());
+			$TP->addRowStyle(trim($postenButtons) == "" ? "display:none;" : "");
+			$TP->addCellStyle(1, "padding-right:10px;");
+			#$TP->addRowClass("backgroundColor0");
+
+			
+			/**
+			 * ROW 2
+			 */
+			$BTrash = new Button("Posten löschen","./images/i2/delete.gif");
+			$BTrash->type("icon");
+			$BTrash->style("float:right;margin-right:10px;");
+			$BTrash->onclick("deleteClass('Posten','".$t->getID()."',function() { $('PostenDisplayD".$t->getID()."1').style.display='none'; $('PostenDisplayD".$t->getID()."2').style.display='none'; if($('PostenDisplayD".$t->getID()."4')) $('PostenDisplayD".$t->getID()."4').style.display='none'; $('PostenDisplayD".$t->getID()."3').style.display='none'; $('optionsPosten".$t->getID()."').style.display='none'; Auftrag.updateNettoBrutto(".$t->A("GRLBMID").", ".$t->getID()."); },'Posten wirklich löschen?');");
+
+			$BEdit = new Button("Posten bearbeiten","./images/i2/edit.png");
+			$BEdit->type("icon");
+			$BEdit->style("float:right;margin-right:20px;");
+			$BEdit->onclick("contentManager.editInPopup('Posten', '{$t->getID()}', 'Posten bearbeiten');");
+
+			
+			$IP = new HTMLInput("name", "text", $ta->name);
+			$IP->style("width:80%;text-align:left;font-weight:bold;");
+			$IP->id("nameID".$t->getID());
+			$IP->activateMultiEdit("Posten", $t->getID());
+			
+			$rowTwoContent = array($BEdit, $BTrash, $IP);
+			$rowTwoContent = Aspect::joinPoint("rowTwoContent", $t, __METHOD__, $rowTwoContent, $rowTwoContent);
+
 			$TP->addRow(array("
-					<div id=\"posNr".$t->getID()."\">".$positionsNummern[$t->getID()]."</div>",
-					"$BSettings
-					<input
-						style=\"width:90%;text-align:left;font-weight:bold;\"
-						class=\"multiEditInput2 postenNameInput\"
-						onfocus=\"oldValue = this.value;\"
-						onblur=\"if(oldValue != this.value) saveMultiEditInput('Posten','".$t->getID()."','name');\"
-						value=\"".htmlentities($ta->name, ENT_COMPAT, "UTF-8")."\"
-						id=\"nameID".$t->getID()."\"
-						type=\"text\"
-						onkeydown=\"if(event.keyCode == 13) saveMultiEditInput('Posten','".$t->getID()."','name');\"  />"));
+					<div id=\"posNr".$t->getID()."\">".Aspect::joinPoint("alterPosition", $this, __METHOD__, array($positionsNummern[$t->getID()], $t->getA()), $positionsNummern[$t->getID()])."</div>",
+					implode("", $rowTwoContent)));
 			$TP->addRowColspan(2, 3);
 			$TP->addCellStyle(1, "padding:0px;padding-right:3px;text-align:right;font-weight:bold;");
 			$TP->addRowStyle("background-color:#eee;");
 			$TP->setRowID("PostenDisplayD".$t->getID()."1");
 			#$TP->addRowClass("backgroundColor0");
 			
+			Aspect::joinPoint("afterSecondRow", $this, __METHOD__, array($TP, $t));
 			
 			/**
 			 * ROW 3
@@ -479,8 +531,9 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			$IVK->id("VKsID".$t->getID());
 			
 			$IMenge = new HTMLInput("menge", "text", $ta->menge);
-			$IMenge->activateMultiEdit("Posten", $t->getID(), "function(){ Auftrag.updateNettoBrutto(".$t->A("GRLBMID").", ".$t->getID()."); }");
+			$IMenge->activateMultiEdit("Posten", $t->getID(), "function(t){ Auftrag.checkBestand(t); Auftrag.updateNettoBrutto(".$t->A("GRLBMID").", ".$t->getID()."); }");
 			$IMenge->setClass("multiEditInput2");
+			$IMenge->style("width:90px;");
 			if($ta->PostenUsedSerials != "[]" AND $ta->PostenUsedSerials != "")
 				$IMenge->isDisabled (true);
 			#<input 
@@ -494,7 +547,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			$TP->addRow(array("",
 				"M: $IMenge ".Aspect::joinPoint("postenDetails", $this, __METHOD__, array($t), "").(($this->showRabatt AND $showPrices) ? "<span style=\"float:right;margin-left:5px;\">P: $IPreis</span>".CustomizerRabatt::getInput($t) : "<span style=\"color:grey;\">".$t->A("gebinde")."</span>"),
 				($showPrices ? ($this->showRabatt ? "VK: $IVK" : "P: $IPreis") : ""),
-				"<span style=\"color:grey;\">".Util::CLFormatNumber($ta->mwst*1, 2, false, false)."%</span>"));
+				"<span style=\"".($t->A("mwstCheck") ? "color:red;font-weight:bold;" : "color:grey;")."\">".Util::CLFormatNumber($ta->mwst*1, 2, false, false)."%</span>"));
 			$TP->addCellStyle(4, "text-align:right;");
 			$TP->setRowID("PostenDisplayD".$t->getID()."2");
 			#$TP->addRowClass("backgroundColor0");
@@ -552,7 +605,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 
 		$autofocus = "<script type=\"text/javascript\">/*$('mengeID$lastID').focus();*/</script>";
 		$autofocus = Aspect::joinPoint("autofocus", $this, __METHOD__, array($autofocus), $autofocus);
-		$html .= ($lastID != null ? $autofocus : "")."</ul></form>"."<div id=\"belegSummen\" style=\"".(!$showPrices ? "display:none;" : "")."\">".$this->getSummen()."</div>".OnEvent::script("\$j('#PostenSortableContainer').css('max-height', contentManager.maxHeight()+'px');");
+		$html .= ($lastID != null ? $autofocus : "")."</ul></form>".Aspect::joinPoint("aboveSum", $this, __METHOD__, array($GRLBM), "")."<div id=\"belegSummen\" style=\"".(!$showPrices ? "display:none;" : "")."\">".$this->getSummen()."</div>".OnEvent::script("\$j('#PostenSortableContainer').css('max-height', contentManager.maxHeight()+'px');");
 
 		if($this->CustomizerPostenSort) $html .= "
 			<script type=\"text/javascript\">
@@ -682,7 +735,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 			$Belege->addOrderV3("isA", "DESC");
 			$Belege->addOrderV3("isB", "DESC");
 
-			$Belege->setLimitV3("12");
+			$Belege->setLimitV3("48");
 			$Belege->lCV3();
 			
 			return $Belege;
@@ -699,7 +752,7 @@ class mPostenGUI extends mPosten implements iGUIHTML2, icontextMenu {
 		$Belege->addOrderV3("isG", "DESC");
 		$Belege->addOrderV3("isWhat", "DESC");
 
-		$Belege->setLimitV3("12");
+		$Belege->setLimitV3("48");
 		$Belege->lCV3();
 
 		return $Belege;

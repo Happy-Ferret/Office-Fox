@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeletable2 {
 
@@ -24,7 +24,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 	protected $letterType = "";
 	public $CustomizerTeilzahlungen = false;
 	public $CustomizerPostenAddLabelInsertOrigin = true;
-
+	protected $newPostenMessageBestand = "";
 	// <editor-fold defaultstate="collapsed" desc="getOnDeleteEvent">
 	public function getOnDeleteEvent(){
 		return "function() { contentManager.reloadFrameRight(); contentManager.reloadFrameLeft(); }";
@@ -44,8 +44,8 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 		if($parsers){
 			$this->setParser("datum","Util::CLDateParser");
 			$this->setParser("lieferDatum","Util::CLDateParserE");
-			$this->setParser("rabatt","Util::CLNumberParserZ");
-			$this->setParser("rabattInW","Util::CLNumberParserZ");
+			#$this->setParser("rabatt","Util::CLNumberParserZ");
+			#$this->setParser("rabattInW","Util::CLNumberParserZ");
 			$this->setParser("leasingrate","Util::CLNumberParserZ");
 			$this->setParser("payedWithSkonto","Util::CLNumberParserZ");
 			$this->setParser("GRLBMpayedDate","Util::CLDateParserE");
@@ -79,7 +79,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 		$this->changeA("zahlungsbedingungenID", isset($TBZ[0][0]) ? $TBZ[0][0] : 0);
 		
 		$this->changeA("datum", Util::CLDateParser(time()));
-		$this->changeA("lieferDatum", Util::CLDateParser(time()));
+		#$this->changeA("lieferDatum", Util::CLDateParser(time()));
 
 		$this->saveMe(true, false);
 
@@ -111,113 +111,85 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 	// </editor-fold>
 
 	// <editor-fold defaultstate="collapsed" desc="getSumOfPosten">
+	private $ges_netto;
+	private $ges_brutto;
+	private $ges_ek1;
+	private $ges_mwst;
+	private $mwst;
 	public function getSumOfPosten($returnArray = false, $saveValues = false, $calcUpToPostenID = null){
 		$this->loadMe();
 		$aC = new mPosten();
 		$aC->addAssocV3("GRLBMID", "=", $this->getID());
 		
-		#$aC = anyC::get("Posten", "GRLBMID", $this->getID());
-		
-		$gesamt_netto_array = array();
-		$artikelsteuern = array();
-		#$ges_netto = 0;
-		$ges_brutto = 0;
-		$ges_ek1 = 0;
-		$mwst = array();
-		$mwstSums = array();
+		$this->ges_netto = array();
+		$this->ges_brutto = array();
+		$this->ges_mwst = array();
+		$this->ges_ek1 = 0;
+		$this->mwst = array();
 		while($t = $aC->getNextEntry()){
 			if($t->A("PostenIsAlternative") !== null AND $t->A("PostenIsAlternative") > 0)
 				continue;
 			
+			$this->getSumOfPostenInt($t);
 			
-			$rabatt = 1;
-			if(isset($t->getA()->rabatt))
-				$rabatt = (100 - $t->getA()->rabatt) / 100;
-			
-			
-			$menge2 = ($t->A("menge2") != 0 ? $t->A("menge2") : 1);
-			$nettopreis = $t->A("menge") * $menge2 * $t->A("preis") * $rabatt;
-			
-			
-			if(!isset($gesamt_netto_array[$t->A("mwst")]))
-				$gesamt_netto_array[$t->A("mwst")] = 0;
-
-			$gesamt_netto_array[$t->A("mwst")] += $nettopreis;
-			
-			if(isset($t->getA()->steuer)){
-				if(!isset($artikelsteuern[$t->A("steuer")]))
-					$artikelsteuern[$t->A("steuer")] = 0;
-
-				$artikelsteuern[$t->A("steuer")] += $nettopreis * ($t->A("steuer") / 100);
-			}
-			
-			
-			$posten_brutto = ($t->A("isBrutto") == "1" ? $t->A("bruttopreis") * $t->A("menge") * $menge2 * $rabatt : $t->A("preis") * $t->A("menge") * $menge2 * (100 + $t->A("mwst")) / 100 * $rabatt) ;
-
-			$ges_brutto += $posten_brutto;
-
-			$ges_ek1 += $t->A("menge") * $menge2 * $t->A("EK1");
-
-			if(array_search($t->A("mwst"), $mwst) === false){
-				$mwst[] = $t->A("mwst");
-				$mwstSums[$t->A("mwst")] = 0;
-			}
-			$mwstSums[$t->A("mwst")] += $posten_brutto;
 			
 			if($calcUpToPostenID != null AND $calcUpToPostenID == $t->getID())
 				break;
 		}
 
-		#if($aC->numLoaded() == 0 AND !$returnArray) return null;
-
+		
+		$rabatt = $this->A("rabatt");
+		if($rabatt != 0){
+			$aC = new mPosten();
+			$aC->addAssocV3("PostenID", "=", "-9999999"); //don't load a thing!
+			foreach($this->ges_netto as $key => $value)
+				$aC->addVirtualPosten(1,"", "", "", $value * ($rabatt / 100) * -1, $key, 0);
+			
+			while($t = $aC->n())
+				$this->getSumOfPostenInt($t);
+			
+		}
+		
 		/**
 		 * VERSANDKOSTEN
 		 */
 		$Versand = $this->A("versandkosten") * 1;
 		if($Versand != 0 AND $calcUpToPostenID == null){
 
-			$posten_brutto = $Versand * ((100 + $this->A("versandkostenMwSt")) / 100);
-
-			$ges_brutto += $posten_brutto;
-
-			$ges_ek1 += $Versand;
-
-			if(!isset($gesamt_netto_array[$this->A("versandkostenMwSt")]))
-				$gesamt_netto_array[$this->A("versandkostenMwSt")] = 0;
+			if(!isset($this->ges_brutto[$this->A("versandkostenMwSt")]))
+				$this->ges_brutto[$this->A("versandkostenMwSt")] = 0;
 			
-			$gesamt_netto_array[$this->A("versandkostenMwSt")] += $Versand;
+			if(!isset($this->ges_brutto[$this->A("versandkostenMwSt")]))
+				$this->ges_brutto[$this->A("versandkostenMwSt")] = 0;
 
-			if(array_search($this->A("versandkostenMwSt"), $mwst) === false)
-				$mwst[] = $this->A("versandkostenMwSt");
+			
+			$this->ges_brutto[$this->A("versandkostenMwSt")] += $Versand * ((100 + $this->A("versandkostenMwSt")) / 100);
+			$this->ges_netto[$this->A("versandkostenMwSt")] += $Versand;
+			$this->ges_ek1 += $Versand;
 
-			$mwstSums[$this->A("versandkostenMwSt")] += $posten_brutto;
-		}
-
-		
-		foreach($mwstSums AS $key => $value)
-			$mwstSums[$key] = Util::kRound($value);
-		
-		$steuern = array();
-		$ges_mwst = 0;
-		foreach($gesamt_netto_array AS $key => $value){
-			$ges_mwst += Util::kRound($value * ($key / 100));
-			$steuern[$key] = $mwstSums[$key] - $value;
+			if(array_search($this->A("versandkostenMwSt"), $this->mwst) === false)
+				$this->mwst[] = $this->A("versandkostenMwSt");
+			
 		}
 		
-		foreach($artikelsteuern AS $key => $value)
-			$artikelsteuern[$key] = Util::kRound ($value, 2);
-			
-		$ges_brutto = Util::kRound($ges_brutto);
-		$ges_mwst = Util::kRound($ges_mwst);
-
-		if(array_sum($mwstSums) != $ges_brutto){ //fix round errors
-			$diff = array_sum($mwstSums) - $ges_brutto;
-			foreach($mwstSums AS $m => $v){ //just to find the first entry!
-				$mwstSums[$m] = $v - $diff;
-				break;
+		
+		//Netto-Modus
+		if($this->A("GRLBMCalcModeSum") == 1)
+			foreach($this->ges_netto AS $key => $value){
+				$ust = Util::kRound($value * ($key / 100));
+				$this->ges_brutto[$key] = $value + $ust;
+				$this->gesamt_mwst[$key] = $ust;
 			}
-		}
 
+		//Brutto-Modus
+		if($this->A("GRLBMCalcModeSum") == 0)
+			foreach($this->ges_netto AS $key => $value){
+				$ust = Util::kRound($value * ($key / 100));
+				$this->ges_netto[$key] = $this->ges_brutto[$key] - $ust;
+				$this->ges_mwst[$key] = $ust;
+			}
+		
+		
 		if($this->A("isAbschlussrechnung") == "1" AND $calcUpToPostenID == null){
 			$oC = new anyC();
 			$oC->setCollectionOf("GRLBM");
@@ -226,27 +198,75 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 			$oC->addAssocV3("isR", "=" , "1");
 
 			while($r = $oC->getNextEntry()){
-				$ges_brutto -= $r->A("bruttobetrag");
-				$ges_mwst -= $r->A("steuern");
+				$subSum = $r->getSumOfPosten(true);
+				
+				foreach($subSum[5] AS $mwst => $value)
+					$this->ges_brutto[$mwst] -= $value;
+				
+				foreach($subSum[6] AS $mwst => $value)
+					$this->ges_netto[$mwst] -= $value;
+				
+				foreach($subSum[7] AS $mwst => $value)
+					$this->ges_mwst[$mwst] -= $value;
+				
 			}
 		}
 		
+		$ges_brutto = array_sum($this->ges_brutto);
 		$ges_brutto = Aspect::joinPoint("alterGesBrutto", $this, __METHOD__, array($ges_brutto), $ges_brutto);
 		
-		$ges_netto = $ges_brutto - $ges_mwst;
-
-		$ges_brutto += array_sum($artikelsteuern);
 		
 		if($saveValues) {
-			$this->changeA("nettobetrag", $ges_netto);
+			$this->changeA("nettobetrag", array_sum($this->ges_netto));
 			$this->changeA("bruttobetrag", $ges_brutto);
-			$this->changeA("steuern", $ges_mwst);
-			$this->changeA("ek1betrag", $ges_ek1);
+			$this->changeA("steuern", array_sum($this->ges_mwst));
+			$this->changeA("ek1betrag", $this->ges_ek1);
 			$this->saveMe();
 		}
+		
 
-		if(!$returnArray) return $ges_brutto;
-		else return array($ges_netto, $ges_mwst, $ges_brutto, $mwst, $ges_ek1, $mwstSums, $gesamt_netto_array, $steuern);
+		if(!$returnArray)
+			return $ges_brutto;
+		
+		return array(
+			array_sum($this->ges_netto), 
+			array_sum($this->ges_mwst), #1
+			$ges_brutto, 
+			$this->mwst, #3 
+			$this->ges_ek1, 
+			$this->ges_brutto, #5
+			$this->ges_netto, 
+			$this->ges_mwst); #7
+	}
+	
+	private function getSumOfPostenInt($t){
+		$prices = $t->prices($this);
+		
+		$posten_brutto = $prices["bruttoGesamt"];
+		$nettopreis = $prices["nettoGesamt"];
+		
+		
+		if(!isset($this->ges_netto[$t->A("mwst")]))
+			$this->ges_netto[$t->A("mwst")] = 0;
+		
+		if(!isset($this->ges_brutto[$t->A("mwst")]))
+			$this->ges_brutto[$t->A("mwst")] = 0;
+
+		$this->ges_netto[$t->A("mwst")] += $nettopreis;
+		$this->ges_brutto[$t->A("mwst")] += $posten_brutto;
+		$this->ges_ek1 += $prices["ek1Gesamt"];
+		
+		#if(isset($t->getA()->steuer)){
+		#	if(!isset($this->artikelsteuern[$t->A("steuer")]))
+		#		$this->artikelsteuern[$t->A("steuer")] = 0;
+
+		#	$this->artikelsteuern[$t->A("steuer")] += $nettopreis * ($t->A("steuer") / 100);
+		#}
+
+
+		if(array_search($t->A("mwst"), $this->mwst) === false)
+			$this->mwst[] = $t->A("mwst");
+		
 	}
 	// </editor-fold>
 
@@ -336,7 +356,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 	//  </editor-fold>
 
 	// <editor-fold defaultstate="collapsed" desc="cloneMe">
-	function cloneMe($quiet = false, $AuftragID = null, $date = null){
+	function cloneMe($quiet = false, $AuftragID = null, $date = null, $updatePrices = false){
 		if($this->A == null) $this->loadMe();
 		
 		$_SESSION["BPS"]->setActualClass("clone".get_class($this));
@@ -387,8 +407,9 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 		
 		Posten::$recalcBeleg = false;
 		$mP = new mPosten();
-		$mP->cloneAllToGRLBM($oldGRLBMID);
-		if(!$quiet) echo $this->A->AuftragID;
+		$mP->cloneAllToGRLBM($oldGRLBMID, $updatePrices, $Auftrag->A("kundennummer"));
+		if(!$quiet)
+			echo $this->A->AuftragID;
 		Posten::$recalcBeleg = true;
 		
 		return $newGRLBMID;
@@ -405,9 +426,12 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 		/*if($mP->numLoaded() > 0)
 			die("alert:AuftraegeMessages.A001");*/
 		
+		$forceDelete = false;
+		if($this->getMyPrefix() == "B")
+			$forceDelete = true;
 		Posten::$recalcBeleg = false;
 		while($t = $mP->getNextEntry())
-			$t->deleteMe();
+			$t->deleteMe($forceDelete);
 		Posten::$recalcBeleg = true;
 		
 		parent::deleteMe();
@@ -439,35 +463,73 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 
 	// <editor-fold defaultstate="collapsed" desc="getPostenCopy">
 	public function getPostenCopy($ArtikelID, $menge = 1, $beschreibung = null, $kundennummer = null, $preis = null){
-		$this->loadMe();
-		if($this->A->isPayed == "1")
+		if($this->A("isPayed") == "1")
 			die("alert:AuftraegeMessages.A004");
 			
-		$_SESSION["messages"]->addMessage("creating Posten for Auftrag ".$this->ID." of Artikel $ArtikelID");
+		#$_SESSION["messages"]->addMessage("creating Posten for Auftrag ".$this->ID." of Artikel $ArtikelID");
 		$p = new Posten(-1);
-		return $p->newFromArtikel($ArtikelID, $this->ID, $menge, $beschreibung, $kundennummer, $preis);
+		$id = $p->newFromArtikel($ArtikelID, $this->ID, $menge, $beschreibung, $kundennummer, $preis);
+		$this->newPostenMessageBestand = $p->messageBestand;
+		return $id;
 	}
 	// </editor-fold>
 
+	protected function copyPostenFromMulti($GRLBMIDs){
+		if(count($GRLBMIDs) == 0)
+			return;
+		
+		Aspect::joinPoint("before", $this, __METHOD__, array($GRLBMIDs));
+		self::$copySortOrderFind = false;
+		foreach($GRLBMIDs AS $GRLBMID)
+			$this->copyPostenFrom($GRLBMID, 0, false);
+	}
+	
+	private static $copySortOrderFind = true;
 	public static $copySortOrder = 0;
 	public $copyPostenFromPostenIDs = array();
 	// <editor-fold defaultstate="collapsed" desc="copyPostenFrom">
-	public function copyPostenFrom($fromId){#, $addToSort = 0){
+	public function copyPostenFrom($fromId){
 		if($this->A("isPayed") == "1")
 			die("error:AuftraegeMessages.A004");
 		
 		$this->copyPostenFromPostenIDs = array();
 		
 		$GRLBM = new GRLBM($fromId);
-		if($GRLBM->getMyPrefix() == "L" AND $this->getMyPrefix() == "R")
-			$this->changeA("lieferDatum", $GRLBM->A("datum"));
+		if($GRLBM->A("AuftragID") == $this->A("AuftragID")){
+			if($GRLBM->getMyPrefix() == "B" AND $this->getMyPrefix() != "B")
+				if($this->getMyPrefix() == "L")
+					$this->changeA("datum", $GRLBM->A("lieferDatum"));
+				else
+					$this->changeA("lieferDatum", $GRLBM->A("lieferDatum"));
+
+			if($GRLBM->getMyPrefix() == "L" AND $this->getMyPrefix() == "R")
+				$this->changeA("lieferDatum", $GRLBM->A("datum"));
+
+			if($GRLBM->getMyPrefix() == "A" AND $this->getMyPrefix() == "B")
+				$this->changeA("lieferDatum", $GRLBM->A("lieferDatum"));
+		}
+		
+		$P = new Posten(-1);
+		$P->loadMeOrEmpty();
+		if(self::$copySortOrderFind AND $P->A("PostenSortOrder") !== null){
+			$AC = anyC::get("Posten", "GRLBMID", $this->getID());
+			$AC->addOrderV3("PostenSortOrder", "DESC");
+			$AC->setLimitV3("1");
+			$L = $AC->n();
+			if($L)
+				self::$copySortOrder = $L->A("PostenSortOrder") + 1;
+		}
+		
 		
 		$ps = new anyC();
 		$ps->setCollectionOf("Posten");
-		$ps->addAssocV3("GRLBMID","=",$fromId);
+		$ps->addAssocV3("GRLBMID", "=", $fromId);
+		if($P->A("PostenSortOrder") !== null)
+			$ps->addOrderV3("PostenSortOrder");
+		
 		$ps->addOrderV3("PostenID");
 		$i = 0;
-		while(($t = $ps->getNextEntry())){
+		while(($t = $ps->n())){
 			$A = $t->getA();
 			$A->GRLBMID = $this->getID();
 			if(isset($A->PostenSortOrder))
@@ -476,7 +538,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 			if($i == 0 AND isset($A->PostenAddLine) AND $this->getMyPrefix() != "A" AND $this->CustomizerPostenAddLabelInsertOrigin){
 				$oldGRLBM = new GRLBM($fromId);
 				if($oldGRLBM->A("AuftragID") == $this->A("AuftragID"))
-					$A->PostenAddLine = "Aus ".Stammdaten::getLongType($oldGRLBM->getMyPrefix())." ".$oldGRLBM->A("nummer")." vom ".$oldGRLBM->A("datum");
+					$A->PostenAddLine = Aspect::joinPoint ("alterCopyLabel", $this, __METHOD__, array($oldGRLBM), "Aus ".Stammdaten::getLongType($oldGRLBM->getMyPrefix())." ".$oldGRLBM->A("nummer")." vom ".$oldGRLBM->A("datum"));
 			}
 			
 			if($this->getMyPrefix() == "O" AND $t->A("oldArtikelID") != "0"){
@@ -489,12 +551,28 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 				
 				$temp = Posten::$recalcBeleg;
 				Posten::$recalcBeleg = false;
-				$this->copyPostenFromPostenIDs[] = $nP->newMe();
+				$this->copyPostenFromPostenIDs[] = $newID = $nP->newMe(true, false, false);
+				
+				if(Session::isPluginLoaded("mPostenKalkulation")){
+					$AC = anyC::get("PostenKalkulation", "PostenKalkulationPostenID", $t->getID());
+					while($PK = $AC->n()){
+						$PK->changeA("PostenKalkulationPostenID", $newID);
+						$PK->newMe();
+					}
+				}
+				
 				Posten::$recalcBeleg = $temp;
 			}
 			
 			$i++;
 		}
+		
+		
+		if($GRLBM->A("AuftragID") == $this->A("AuftragID"))
+			for($i = 1;$i < 20; $i++)
+				if($GRLBM->A("GRLBMCustomField$i") !== null)
+					$this->changeA("GRLBMCustomField$i", $GRLBM->A("GRLBMCustomField$i"));
+
 
 		$this->saveMe();
 		$G = new GRLBM($this->getID(), false);
@@ -516,22 +594,24 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 	// </editor-fold>
 
 	// <editor-fold defaultstate="collapsed" desc="addPosten">
-	public function addPosten($artikelName, $einheit, $anzahl, $preis, $mwst, $beschreibung = "", $isBrutto = false, $oldArtikelID = null, $EK1 = 0){
+	public function addPosten($artikelName, $einheit, $anzahl, $preis, $mwst = null, $beschreibung = "", $isBrutto = false, $oldArtikelID = null, $EK1 = 0, $EK2 = 0){
 		$preis = $preis * 1;
 		$P = new Posten(-1, false);
-		$A = $P->newAttributes();
+		$A = $P->newAttributes($mwst === null ? $this : null);
 		
 		$A->GRLBMID = $this->ID;
 		$A->name = $artikelName;
 		$A->gebinde = $einheit;
 		$A->preis = $preis;
-		$A->mwst = $mwst;
+		if($mwst !== null)
+			$A->mwst = $mwst;
 		$A->menge = $anzahl;
 		$A->beschreibung = $beschreibung;
 		$A->EK1 = $EK1;
+		$A->EK2 = $EK2;
 		
 		if(property_exists($A, "PostenSortOrder")) //Fix unsorted new Posten after sorting
-			$A->PostenSortOrder = 127;
+			$A->PostenSortOrder = 999999;
 		
 		if($oldArtikelID != null) $A->oldArtikelID = $oldArtikelID;
 
@@ -576,7 +656,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 	
 	// <editor-fold defaultstate="collapsed" desc="addArtikel">
 	public function addArtikel($ArtikelID, $menge = 1, $beschreibung = null, $kundennummer = null, $preis = null){
-		$this->getPostenCopy($ArtikelID, $menge, $beschreibung, $kundennummer, $preis);
+		return $this->getPostenCopy($ArtikelID, $menge, $beschreibung, $kundennummer, $preis);
 	}
 	// </editor-fold>
 
@@ -719,7 +799,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 				Red::alertD ("Die Belegnummer ".$this->A("nummer")." wurde bereits vergeben!");
 		}
 		
-		if(Session::isPluginLoaded("Provisionen") AND $this->A("isPayed") != $oldMe->A("isPayed"))
+		if(Session::isPluginLoaded("Provisionen") AND $this->A("isPayed") != $oldMe->A("isPayed") AND $this->getMyPrefix() == "R")
 			Provisionen::zuweisen($this, $this->A("isPayed") == "1");
 		
 		if($checkPayed AND $this->A("isPayed") == "1" AND ($this->A("isR") == "1"/* OR $this->A("isB") == "1"*/) AND $oldMe->A("isPayed") == "1" AND !$print)
@@ -748,7 +828,8 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 
 	// <editor-fold defaultstate="collapsed" desc="getMyPrefix">
 	public function getMyPrefix($forceB = false){
-		if($this->A == null) $this->loadMe();
+		if($this->A == null)
+			$this->loadMe();
 
 		if($this->A->isR == "1") return "R";
 		if($this->A->isL == "1") return "L";
@@ -799,7 +880,7 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 
 		$Stammdaten = Stammdaten::getActiveStammdaten();
 
-		return array(array($Stammdaten->A("firmaLang").", ".$Stammdaten->A("strasse")." ".$Stammdaten->A("nr").", ".$Stammdaten->A("plz")." ".$Stammdaten->A("ort"), $Adresse->getFormattedAddress()));
+		return array(array($Stammdaten->A("firmaLang").", ".$Stammdaten->A("strasse")." ".$Stammdaten->A("nr").", ".$Stammdaten->A("plz")." ".$Stammdaten->A("ort").(ISO3166::getCountryToCode($Stammdaten->A("land")) != $Adresse->A("land") ? ", ".ISO3166::getCountryToCode($Stammdaten->A("land")) : ""), $Adresse->getFormattedAddress()));
 	}
 	
 	public function updateTodo(){
@@ -819,14 +900,18 @@ class GRLBM extends PersistentObject implements iCloneable, iRepeatable, iDeleta
 		$rep = array("ä", "ö", "ü", "Ä", "Ö", "Ü");
 		$repWith = array("ae", "oe", "ue", "Ae", "Oe", "Ue");
 		
+		$sepa = new stdClass();
+		if($this->A("GRLBMSEPAData") != "" AND $this->A("GRLBMSEPAData") != "[]")
+			$sepa = json_decode($this->A("GRLBMSEPAData"));
+
 		return array(
 			"name" => str_replace($rep, $repWith, $Kappendix->A("KappendixSameKontoinhaber") ? trim($Adresse->getShortAddress()) : $Kappendix->A("KappendixKontoinhaber")),
 			"BLZ" => $Kappendix->A("KappendixBLZ"), 
 			"konto" => $Kappendix->A("KappendixKontonummer"),
-			"BIC" => $Kappendix->A("KappendixSWIFTBIC"),
-			"IBAN" => $Kappendix->A("KappendixIBAN"),
-			"mandatDatum" => $Kappendix->A("KappendixIBANMandatDatum"),
-			"referenz" => $this->A("prefix").$this->A("nummer"),
+			"BIC" => isset($sepa->BIC) ? $sepa->BIC : $Kappendix->A("KappendixSWIFTBIC"),
+			"IBAN" => isset($sepa->IBAN) ? $sepa->IBAN : $Kappendix->A("KappendixIBAN"),
+			"mandatDatum" => isset($sepa->MandateDate) ? $sepa->MandateDate : $Kappendix->A("KappendixIBANMandatDatum"),
+			"referenz" => isset($sepa->MandateID) ? $sepa->MandateID : $this->A("prefix").$this->A("nummer"),
 			"betrag" => Util::kRound($this->A("bruttobetrag")),
 			"zweck" => $this->A("prefix").$this->A("nummer")." vom ".$this->A("datum"),
 			"kontoID" => 0);

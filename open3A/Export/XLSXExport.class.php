@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class XLSXExport extends UnifiedTable {
 	protected $worksheet;
@@ -155,8 +155,19 @@ class XLSXExport extends UnifiedTable {
 		
 	}
 
-	public function getExport($filename){
+	private $written = false;
+	
+	public function getPHPExcel(){
 		if(count($this->content) > 0)
+			$this->writeWorksheet();
+		
+		$this->written = true;
+		
+		return $this->PE;
+	}
+	
+	public function getExport($filename){
+		if(count($this->content) > 0 AND !$this->written)
 			$this->writeWorksheet();
 		
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

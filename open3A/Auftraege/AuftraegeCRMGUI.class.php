@@ -15,11 +15,17 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class AuftraegeCRMGUI extends Auftraege implements iGUIHTMLMP2 {
 	public static $GRLBMS;
 	public static $first = true;
+	
+	function __construct() {
+		parent::__construct();
+		
+		$this->customize();
+	}
 	
 	public function setOwner($class, $id){
 		BPS::setProperty(get_class($this), "ownerClassID", $id);
@@ -77,7 +83,7 @@ class AuftraegeCRMGUI extends Auftraege implements iGUIHTMLMP2 {
 			$html .= "<div class=\"backgroundColor0\" style=\"float:right;padding:3px;margin-right:-3px;margin-top:-3px;\">";
 			self::$first = false;
 			
-			$BA = Auftrag::getBelegArten();
+			$BA = Auftrag::getBelegArten(null, false, "open3A");
 			$show = BPS::getProperty("AuftraegeCRMGUI", "show", "all");
 			
 			foreach($BA AS $v){
@@ -92,7 +98,7 @@ class AuftraegeCRMGUI extends Auftraege implements iGUIHTMLMP2 {
 		
 		$C = Auftraege::getStatus();
 		
-		$html .= $E->A("auftragDatum").(isset($C[$w]) ? " (".$C[$w].")" : "")."<div style=\"clear:both;height:10px;\"></div>";
+		$html .= $E->A("auftragDatum").(isset($C[$w]) ? " (".$C[$w].")" : "").Aspect::joinPoint("top", null, __METHOD__, array($E), "")."<div style=\"clear:both;height:10px;\"></div>";
 		$show = BPS::getProperty("AuftraegeCRMGUI", "show", "all");
 		
 		while($G = self::$GRLBMS->getNextEntry()){
@@ -103,7 +109,6 @@ class AuftraegeCRMGUI extends Auftraege implements iGUIHTMLMP2 {
 				continue;
 			
 			$B = new Button("Beleg anzeigen","./images/i2/pdf.gif", "icon");
-			#$B->windowRme();
 			$B->style("float:left;margin-right:5px;");
 			
 			$BP = "";

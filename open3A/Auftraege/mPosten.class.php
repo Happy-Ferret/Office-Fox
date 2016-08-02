@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mPosten extends anyC {
 	private $letterType = "";
@@ -55,13 +55,13 @@ class mPosten extends anyC {
 				if(defined("PHYNX_VIA_INTERFACE") AND !class_exists("CustomizerPostenZwischensummeGUI", false))
 					throw new ClassNotFoundException("CustomizerPostenZwischensummeGUI");
 				
-				$C = new CustomizerPostenZwischensummeGUI();
+				$C = new CustomizerPostenZwischensummeGUI(null, false);
 				$ZS = true;
 			} catch (ClassNotFoundException $e){
 
 			}
 			
-			if($t->A("PostenAddLine") != "" AND $ZS){
+			if($t->A("PostenAddLine") != "" AND $t->A("PostenAddLine") != "-" AND $ZS){
 				if(strpos($t->A("PostenAddLine"), "[") === 0){
 					$titles = json_decode($t->A("PostenAddLine"));
 					foreach($titles AS $T){
@@ -115,14 +115,14 @@ class mPosten extends anyC {
 		if($l == "store") return str_replace(",",".",$w);
 	}*/
 
-	function cloneAllToGRLBM($GRLBMID){
+	function cloneAllToGRLBM($GRLBMID, $updatePrices = false, $kundennummer = 0){
 		$this->addAssocV3("GRLBMID","=",$GRLBMID);
-
-		while(($t = $this->getNextEntry()))
-			$t->cloneMe();
+		
+		while($t = $this->n())
+			$t->cloneMe($updatePrices, $kundennummer);
 	}
 	
-	function addVirtualPosten($menge, $einheit, $bezeichnung, $beschreibung, $preis, $mwst, $isBrutto, $bruttopreis){
+	function addVirtualPosten($menge, $einheit, $bezeichnung, $beschreibung, $preis, $mwst, $isBrutto, $bruttopreis = null, $artikelnummer = ""){
 		if($this->collector == null)
 			$this->lCV3();
 		
@@ -135,153 +135,189 @@ class mPosten extends anyC {
 		$PA->mwst = $mwst;
 		$PA->beschreibung = $beschreibung;
 		$PA->isBrutto = $isBrutto;
-		$PA->bruttopreis = $bruttopreis;
+		if($bruttopreis == null)
+			$PA->bruttopreis = $PA->preis * (1 + ($PA->mwst / 100));
+		else
+			$PA->bruttopreis = $bruttopreis;
+		$PA->artikelnummer = $artikelnummer;
 		
 		$P->setA($PA);
 		$this->collector[] = $P;
 	}
 
-	public function getFPDF($fpdf, GRLBM $GRLBM){
-		if($this->letterType == "M") return;
+	public function getFPDF($fpdf, GRLBM $GRLBM, $resetValues = true, $showHeader = true){
+		if($this->letterType == "M")
+			return;
+		
 		$userHiddenFields = mUserdata::getHides("Artikel");
 		
-		$fpdf->gesamtEK1 = 0;
-		$fpdf->gesamtEK2 = 0;
-		$fpdf->gesamt_netto = array();
-		$fpdf->gesamt_brutto = 0;
-		
+		if($resetValues){
+			$fpdf->gesamtEK1 = 0;
+			$fpdf->gesamtEK2 = 0;
+			$fpdf->gesamt_netto = array();
+			$fpdf->gesamt_brutto = array();
+		}
+		#$fpdf->positionPreis = "start";
+				
 		$positionsNummern = $this->getPositionsNummern();
 		$i = 0;
 		while($PC = $this->getNextEntry()){
 
+			if($this->letterType == "L" AND $PC->A("lagerort") != "")
+				$PC->changeA("beschreibung", "Lager: ".$PC->A("lagerort")."\n".$PC->A("beschreibung"));
+				
+			
 			$A = $PC->getA();
 			
 			if(!$fpdf->showPositionen){
-				$PC->calcPrices($fpdf);
+				$this->calcPrices($PC, $fpdf, $GRLBM);
 				continue;
 			}
 			
-			if($i == 0 AND (!isset($A->PostenNewPage) OR $A->PostenNewPage == "0"))
+			if($PC->A("PostenUsedSerials")){
+				$S = json_decode($PC->A("PostenUsedSerials"));
+				$PC->changeA("beschreibung", implode("\n", $S)."\n".$PC->A("beschreibung"));
+			}
+			
+			if($showHeader AND $i == 0 AND (!isset($A->PostenNewPage) OR $A->PostenNewPage == "0"))
 				$fpdf->printPDFHeader();
 
 			if(isset($A->PostenNewPage) AND $A->PostenNewPage == "1")
 					$fpdf->AddPage();
 			
 			
+			Aspect::joinPoint("abovePosten", $this, __METHOD__, array($fpdf, $PC, $i));
 			
+			$yImage = null;
 			$fpdf->currentArticle = $PC;
 			$im = null;
-			if($A->bild != ""){
+			if($A->bild != "" AND strpos($fpdf->showImagesOn, $this->letterType) !== false){
 				$im = imagecreatefromstring(DBImageGUI::getData($A->bild));
 				$ratio = imagesx($im) / imagesy($im);
 				$imHeight = $fpdf->widthPositionBild / $ratio;
 				
-				$yImage = $fpdf->getY() + $imHeight + 10 + 5; //+5 because of first line of text in posten
+				$yImage = $fpdf->GetY() + $imHeight + 10 + 5; //+5 because of first line of text in posten
 				
 				$fpdf->currentArticle = null;
-				if($yImage > $fpdf->h - $fpdf->GetMargin("B"))
+				if($yImage > $fpdf->h - $fpdf->GetMargin("B")){
 					$fpdf->AddPage();
+					$yImage = $fpdf->GetY() + $imHeight + 10 + 5;
+				}
 				$fpdf->currentArticle = $PC;
 			}
 			
-			/*
-			$mwstFaktor = 1 + $A->mwst / 100;
-
-			$einzelpreis = $A->preis * 1 * ($fpdf->showBruttoPreise ? $mwstFaktor : 1);
-			
-			if($fpdf->showBruttoPreise AND $A->isBrutto == "1")
-				$einzelpreis = $A->bruttopreis * 1;
-			elseif(!$fpdf->showBruttoPreise AND $A->isBrutto == "1") 
-				$einzelpreis = $A->bruttopreis / (1 + $A->mwst / 100);
-
-			$dispEinzelpreis = $einzelpreis;
-			
-			$rabatt = 1;
-			if(isset($A->rabatt)) $rabatt = (100 - $A->rabatt) / 100;
-			if(isset($A->rabatt) AND $A->rabatt != 0) $einzelpreis *= $rabatt;
-
-			if($A->isBrutto == "1")
-				$A->preis = $A->bruttopreis / (1 + $A->mwst / 100);
-*/
-
 			if($i != 0)
-				$fpdf->setXY($fpdf->GetX(),$fpdf->GetY()+2);
+				$fpdf->SetXY($fpdf->GetX(),$fpdf->GetY() + 2);
 
+			$fpdf->SetTextColorArray($fpdf->colorPositionen);
 			
-			Aspect::joinPoint("abovePosten", $this, __METHOD__, array($fpdf, $PC, $i));
-			
-			$fpdf->SetFont($fpdf->fontPositionen[0], $fpdf->fontPositionen[1], $fpdf->fontPositionen[2]);
 			
 			Aspect::joinPoint("front", $this, __METHOD__, array($fpdf, $PC, $i));
 			
-			if($this->letterType != "Kalk" AND $fpdf->widthPosition)
-				$fpdf->Cell($fpdf->widthPosition, 5, Aspect::joinPoint("alterPosition", $this, __METHOD__, array($positionsNummern[$PC->getID()], $A), $positionsNummern[$PC->getID()]), 0, 0, $fpdf->alignPosition);
+			$yTop = $fpdf->GetY();
+			$x = $fpdf->GetX();
+			$yBot = array();
+			$yBezeichnung = 0;
+			foreach($fpdf->orderCols AS $col){
+				$width = "width$col";
+				if(!$fpdf->$width)
+					continue;
+				
+				#$fpdf->SetXY($x, $yTop);
+				$fpdf->SetX($x);#, $yTop);
+				$fpdf->SetFont($fpdf->fontPositionen[0], $fpdf->fontPositionen[1], $fpdf->fontPositionen[2]);
+				
+				if($col != "Bezeichnung"){
+					$tempX = $fpdf->GetX();
+					$tempY = $fpdf->GetY();
+					$fpdf->SetXY($x, $yTop);
+				}
+				
+				if($this->letterType != "Kalk"){
+					if($col == "Position")
+						$fpdf->Cell8($fpdf->$width, $fpdf->heightPositionenHeader, Aspect::joinPoint("alterPosition", $this, __METHOD__, array($positionsNummern[$PC->getID()], $A), $positionsNummern[$PC->getID()]), 0, 0, $fpdf->alignPosition);
 
-			if($fpdf->widthMenge)
-				$fpdf->Cell($fpdf->widthMenge, 5, Util::formatNumber($fpdf->language, $A->menge * 1, $fpdf->showDezimalstellenMenge, true, false), 0, 0, $fpdf->alignMenge);
-			
-			if($this->letterType != "Kalk" AND $fpdf->widthEinheit)
-				$fpdf->Cell8($fpdf->widthEinheit, 5, $A->gebinde, 0, 0, $fpdf->alignEinheit);
-			
-			if($fpdf->widthMenge2)
-				$fpdf->Cell($fpdf->widthMenge2, 5, Aspect::joinPoint ("menge2", $this, __METHOD__, array($A), $A->menge2), 0, 0, $fpdf->alignMenge2);
+					if($col == "Einheit")
+						$fpdf->Cell8($fpdf->$width, $fpdf->heightPositionenHeader, $A->gebinde, 0, 0, $fpdf->alignEinheit);
+
+					if($col == "Artikelnummer")
+						$fpdf->Cell8($fpdf->$width, $fpdf->heightPositionenHeader, $A->artikelnummer, 0, 0, "L");
+				}
 				
-			if($this->letterType != "Kalk" AND $fpdf->widthArtikelnummer)
-				$fpdf->Cell8($fpdf->widthArtikelnummer, 5, $A->artikelnummer, 0, 0, "L");
+				if($col == "Menge")
+					$fpdf->Cell8($fpdf->$width, $fpdf->heightPositionenHeader, Util::formatNumber($fpdf->language, $A->menge * 1, $fpdf->showDezimalstellenMenge == "" ? 2 : $fpdf->showDezimalstellenMenge, true, $fpdf->showZeroesMenge), 0, 0, $fpdf->alignMenge);
 				
-			$xbN = $fpdf->getX();
-			$yaNStart = $fpdf->getY();
+				if($col == "Menge2")
+					$fpdf->Cell8($fpdf->$width, $fpdf->heightPositionenHeader, Aspect::joinPoint("menge2", $this, __METHOD__, array($A), $A->menge2), 0, 0, $fpdf->alignMenge2);
+				
+				if($col != "Bezeichnung")
+					$fpdf->SetXY($tempX, $tempY);
+				
 			
-			if($fpdf->widthBezeichnung){
-				$fpdf->SetFont($fpdf->fontPositionenArtikelname[0], $fpdf->fontPositionenArtikelname[1], $fpdf->fontPositionenArtikelname[2]);
-				$fpdf->MultiCell8($fpdf->widthBezeichnung, 5, $fpdf->cur($A->name), 0, "L");
+				if($col == "Bezeichnung"){
+					$fpdf->isInPostenBezeichnung = true;
+					$fpdf->SetFont($fpdf->fontPositionenArtikelname[0], $fpdf->fontPositionenArtikelname[1], $fpdf->fontPositionenArtikelname[2]);
+					$fpdf->MultiCell8($fpdf->$width, $fpdf->heightPositionenHeader, $fpdf->cur($A->name), 0, "L");
+					$yBezeichnung = $x;
+					$fpdf->isInPostenBezeichnung = false;
+				}
+				
+				$x += $fpdf->$width;
+				
+				$newY = $fpdf->getY() + $fpdf->heightPositionenHeader;
+				if($col == "Bezeichnung")
+					$newY = $fpdf->getY();
+				
+				$yBot[] = $newY;
 			}
-			$yaNStart2 = $fpdf->getY();
-
+			
 			if($fpdf->positionPreis == "start"){
-				$fpdf->setXY($xbN + $fpdf->widthBezeichnung, $yaNStart);
+				$yaNStart2 = $fpdf->getY();
+				$fpdf->setXY($x, $yTop);
 				Aspect::joinPoint("tail", $this, __METHOD__, array($fpdf, $PC, $i));
-				$this->printPrices($fpdf, $PC/*, $dispEinzelpreis, $einzelpreis, $rabatt*/);
-				$fpdf->setXY($xbN + $fpdf->widthBezeichnung, $yaNStart2);
+				$this->printPrices($fpdf, $PC, $GRLBM);
+				$fpdf->setXY($x, $yaNStart2);
 			}
 
-			$yaN = $fpdf->getY();
-
-			$yImage = 0;
-			$addImageSpace = false;
-			if($A->bild != ""){
-				$addImageSpace = true;
-				$fpdf->ImageGD($im, $fpdf->positionPositionBild, $yaN, $fpdf->widthPositionBild, $imHeight);
-				$yImage = $yaN + $imHeight;
+			$yBot2 = $yBot;
+			#$yImage = 0;
+			if($A->bild != "" AND strpos($fpdf->showImagesOn, $this->letterType) !== false){
+				$fpdf->ImageGD($im, $fpdf->positionPositionBild, max($yBot), $fpdf->widthPositionBild, $imHeight);
+				$yBot2[] = max($yBot) + $imHeight;
+				#$yImage = max($yBot) + $imHeight;
 			}
 			
-			if($A->beschreibung != "" AND $fpdf->widthBezeichnung) {
+			$startPage = $fpdf->PageNo();
+			$yBeschreibung = 0;
+			if($A->beschreibung != "" AND $fpdf->widthBezeichnung AND $yBezeichnung) {
 				$fpdf->isInPostenBeschreibung = true;
 				$fpdf->SetFont($fpdf->fontPositionenBeschreibung[0], $fpdf->fontPositionenBeschreibung[1], $fpdf->fontPositionenBeschreibung[2]);
-				$fpdf->SetXY($xbN, $yaN);
+				
+				#$fpdf->SetXY($yBezeichnung, max($yBot));
+				$fpdf->SetX($yBezeichnung);
 				$fpdf->MultiCell8($fpdf->widthBezeichnung, $fpdf->heightPositionenBeschreibung, $fpdf->cur($A->beschreibung),0,"L",0);
 				$fpdf->SetFont($fpdf->fontPositionen[0], $fpdf->fontPositionen[1], $fpdf->fontPositionen[2]);
-				$yaN = $fpdf->getY();
-				$fpdf->isInPostenBeschreibung = true;
+				$yBot2[] = $fpdf->getY();
+				$fpdf->isInPostenBeschreibung = false;
+				$yBeschreibung = $fpdf->getY();
 			}
 			
-			#$fixPreisEnd = false;
-			#if($yImage > $yaN)
-			#	$fixPreisEnd = true;
-			#	$yaN = $yImage - $imageSpace;
-			
-			$yaN = max(array($yImage, $yaN));
 
 			if($fpdf->positionPreis == "end"){
-				$fpdf->setXY($xbN + $fpdf->widthBezeichnung, $yaN - 5);
-				$this->printPrices($fpdf, $PC/*, $dispEinzelpreis, $einzelpreis, $rabatt*/);
+				#$fpdf->setXY($x, max($yBot2) - 5);
+				$fpdf->SetXY($x, $fpdf->GetY() - 5);
+				#$fpdf->MultiCell8(0, 5, print_r($yBot, true));
+				$this->printPrices($fpdf, $PC, $GRLBM);
 			}
 
 			if($fpdf->positionPreis == "start")
-				$fpdf->setXY($xbN + $fpdf->widthBezeichnung, $yaN - 5); //Fix space between articles
+				#$fpdf->setXY($x, max($yBot2) - 5); //Fix space between articles
+				$fpdf->SetXY($x, $fpdf->GetY() - 5); //Fix space between articles
 
-			if($this->letterType == "L")
-				$fpdf->Cell(0,5,"",0,0,"R");
+			#if($this->letterType == "L")
+			#	$fpdf->Cell(0,5,"WHAT!?",0,0,"R");
+			
+			
 			
 			if($this->letterType == "Kalk"){
 				if($fpdf->widthEK1)
@@ -291,18 +327,24 @@ class mPosten extends anyC {
 					$fpdf->Cell8($fpdf->widthEK2, 5, (!isset($userHiddenFields["EK2"]) ? $fpdf->cur($fpdf->formatCurrency($fpdf->language,$A->EK2 * 1,$fpdf->showPositionenWaehrung)) : ""), 0, 0, "R");
 				
 				if($fpdf->widthVK)
-					$fpdf->Cell8($fpdf->widthVK,5,$fpdf->cur($fpdf->formatCurrency($fpdf->language,$A->preis  * 1,$fpdf->showPositionenWaehrung)),0,0,"R");
+					$fpdf->Cell8($fpdf->widthVK, 5, $fpdf->cur($fpdf->formatCurrency($fpdf->language, $A->preis  * 1, $fpdf->showPositionenWaehrung)), 0, 0, "R");
 				
 				$fpdf->gesamtEK1 += $A->EK1 * $A->menge;
 				$fpdf->gesamtEK2 += $A->EK2 * $A->menge;
 			}
+			
+			$next = null;
+			if(isset($this->collector[$this->i]))
+				$next = $this->collector[$this->i];
+			
 
-			Aspect::joinPoint("belowPosten", $this, __METHOD__, array($fpdf, $PC));
 			$fpdf->ln($fpdf->abstandPositionen);
-			if($addImageSpace)
-				$fpdf->ln(10);
-			#if($A->isBrutto == "0") $fpdf->gesamt_brutto += $A->preis * (1 + $A->mwst / 100) * $A->menge * $rabatt;
-			#else $fpdf->gesamt_brutto += $A->bruttopreis * $A->menge * $rabatt;
+			Aspect::joinPoint("belowPosten", $this, __METHOD__, array($fpdf, $PC, $next, $yImage));
+			
+			if($yImage != null AND $yImage > $yBeschreibung AND $fpdf->PageNo() == $startPage)
+				$fpdf->SetY($yImage);
+				#$fpdf->ln(10);
+				
 
 			$fpdf->currentArticle = null;
 			if($fpdf->GetY() > $fpdf->h - $fpdf->marginBottom - 10){
@@ -314,40 +356,69 @@ class mPosten extends anyC {
 		}
 		$fpdf->ln(1);
 		
-		if($this->numLoaded() > 0/*isset($PC[0])*/ AND $this->letterType == "R"){
-			$G = $GRLBM;#new GRLBM($PC[0]->getA()->GRLBMID);
+		/*if($this->numLoaded() > 0 AND $this->letterType == "R" AND $GRLBM->A("versandkosten") != 0 AND $fpdf->positionVersandkosten == "above"){
 
-			if($G->A("versandkosten") != 0 AND $fpdf->positionVersandkosten == "above") {
+			$parsedMwSt = $GRLBM->A("versandkostenMwSt");
+			$mwstFaktor = 1 + $parsedMwSt / 100;
+			
+			$fpdf->addPriceToSum($GRLBM->A("versandkosten"), $GRLBM->A("versandkostenMwSt"));
 
-				$parsedMwSt = $G->A("versandkostenMwSt");
-				$mwstFaktor = 1 + $parsedMwSt / 100;/*
-				if(!isset($fpdf->gesamt_netto[$parsedMwSt]))
-					$fpdf->gesamt_netto[$parsedMwSt] = 0;
-				$fpdf->gesamt_netto[$parsedMwSt] += $G->A("versandkosten");
-
-				$fpdf->gesamt_brutto += $G->A("versandkosten") * (1 + $G->A("versandkostenMwSt") / 100);*/
-
-				$fpdf->addPriceToSum($G->A("versandkosten"), $G->A("versandkostenMwSt"));
-
-				$fpdf->SetDrawColor(100, 100, 100);
-				$fpdf->Line($fpdf->GetMargin("L") , $fpdf->getY(), 210-$fpdf->GetMargin("R") , $fpdf->getY());
-				$fpdf->SetDrawColor(0, 0, 0);
-				$fpdf->Cell($xbN - $fpdf->getLeftMargin(), 5, "", 0, 0, "L");
-				$fpdf->Cell8($fpdf->widthBezeichnung, 5, $fpdf->labelVersandkosten, 0, 0, "L");
-				$fpdf->Cell8($fpdf->widthEinzelpreis, 5, $fpdf->cur($fpdf->formatCurrency($fpdf->language, $G->getA()->versandkosten * 1 * ($fpdf->showBruttoPreise ? $mwstFaktor : 1), true)), 0, 0, "R");
-				$fpdf->Cell8($fpdf->widthGesamt, 5, $fpdf->cur($fpdf->formatCurrency($fpdf->language, $G->getA()->versandkosten * 1 * ($fpdf->showBruttoPreise ? $mwstFaktor : 1), true)), 0, 0, "R");
-				$fpdf->ln();
-			}
-		}
+			$fpdf->SetDrawColor(100, 100, 100);
+			$fpdf->Line($fpdf->GetMargin("L") , $fpdf->getY(), 210-$fpdf->GetMargin("R") , $fpdf->getY());
+			$fpdf->SetDrawColor(0, 0, 0);
+			$fpdf->Cell($yBezeichnung - $fpdf->getLeftMargin(), 5, "", 0, 0, "L");
+			$fpdf->Cell8($fpdf->widthBezeichnung, 5, $fpdf->labelVersandkosten, 0, 0, "L");
+			$fpdf->Cell8($fpdf->widthEinzelpreis, 5, $fpdf->cur($fpdf->formatCurrency($fpdf->language, $GRLBM->getA()->versandkosten * 1 * ($fpdf->showBruttoPreise ? $mwstFaktor : 1), true)), 0, 0, "R");
+			$fpdf->Cell8($fpdf->widthGesamt, 5, $fpdf->cur($fpdf->formatCurrency($fpdf->language, $GRLBM->getA()->versandkosten * 1 * ($fpdf->showBruttoPreise ? $mwstFaktor : 1), true)), 0, 0, "R");
+			$fpdf->ln();
+		}*/
+		
 		$fpdf->ln(2);
-		$fpdf->Line($fpdf->GetMargin("L") , $fpdf->getY(), 210-$fpdf->GetMargin("R") , $fpdf->getY());
-		$fpdf->printGesamt($this->letterType);
-
+		if($fpdf->showPositionen){
+			if($fpdf->paddingLinesPosten)
+				$fpdf->Ln($fpdf->paddingLinesPosten / 2);
+			
+			$fpdf->Line($fpdf->GetMargin("L") , $fpdf->getY(), 210-$fpdf->GetMargin("R") , $fpdf->getY());
+		
+			if($fpdf->paddingLinesPosten)
+				$fpdf->Ln($fpdf->paddingLinesPosten / 2);
+		}
 	}
 
-	private function printPrices($fpdf, $Posten/*, $dispEinzelpreis, $einzelpreis, $rabatt*/){
+	private function calcPrices($Posten, PDFBrief $fpdf, GRLBM $GRLBM){
+		if($Posten->A("PostenIsAlternative") !== null AND $Posten->A("PostenIsAlternative") > 0)
+			return;
+		
+		$prices = $Posten->prices($GRLBM);
+		#"nettoPreis" => $nettoPreis, 
+		#"nettoGesamt" => $nettoSumme, 
+		#"brutto" => $bruttoPreis, 
+		#"nettoOhneRabatt" => $nettoOhneRabatt, 
+		#"bruttoGesamt" => $bruttoGesamt, 
+		#"mwstFaktor" => $mwstFaktor, 
+		#"mwstBetragGesamt" => $mwstBetrag, 
+		#"rabattFaktor" => $rabatt, 
+		#"rabattBetrag" => $rabattBetrag);
+		
+		if(!isset($fpdf->gesamt_netto[$Posten->A("mwst")]))
+			$fpdf->gesamt_netto[$Posten->A("mwst")] = 0;
+		
+		if(!isset($fpdf->gesamt_mwst[$Posten->A("mwst")]))
+			$fpdf->gesamt_mwst[$Posten->A("mwst")] = 0;
+		
+		if(!isset($fpdf->gesamt_brutto[$Posten->A("mwst")]))
+			$fpdf->gesamt_brutto[$Posten->A("mwst")] = 0;
+
+		$fpdf->gesamt_netto[$Posten->A("mwst")] += $prices["nettoGesamt"];
+		$fpdf->gesamt_brutto[$Posten->A("mwst")] += $prices["bruttoGesamt"];
+		$fpdf->gesamt_mwst[$Posten->A("mwst")] += $prices["mwstBetragGesamt"];
+		
+		return $prices;
+	}
+	
+	private function printPrices($fpdf, $Posten, $GRLBM){
 		$A = $Posten->getA();
-		$prices = $Posten->calcPrices($fpdf);
+		$prices = $this->calcPrices($Posten, $fpdf, $GRLBM);
 
 		$priceCols = $fpdf->orderColsPrice;
 		
@@ -357,22 +428,24 @@ class mPosten extends anyC {
 		if(in_array($this->letterType, $fpdf->sumHideOn))
 			return;
 		
-		$nettoPreis = $prices["nettoPreis"];
-		$bruttoPreis = $prices["bruttoPreis"];
+		$nettoPreis = $prices["netto"];
+		$bruttoPreis = $prices["brutto"];
 		$rabattBetrag = $prices["rabattBetrag"];
-		$mwstBetrag = $prices["mwstBetrag"];
+		$mwstBetragGesamt = $prices["mwstBetragGesamt"];
 		$mwstFaktor = $prices["mwstFaktor"];
 		
 		$dispEinzelpreis = $nettoPreis + $rabattBetrag;
 		
 		$einzelpreis = $nettoPreis;
 		
+		$gesamtpreis = $prices["nettoGesamt"];
 		if($fpdf->showBruttoPreise){
+			$gesamtpreis = $prices["bruttoGesamt"];
 			$einzelpreis = $bruttoPreis;
 			$dispEinzelpreis = ($nettoPreis + $rabattBetrag) * $mwstFaktor;
 		}
-
-		if($this->letterType != "Kalk"){#$this->letterType == "R" OR $this->letterType == "A" OR $this->letterType == "G" OR $this->letterType == "B"){
+		
+		if($this->letterType != "Kalk"){
 			$fpdf->SetFont($fpdf->fontPositionenPreise[0], $fpdf->fontPositionenPreise[1], $fpdf->fontPositionenPreise[2]);
 
 			$priceColsContent = array(
@@ -381,9 +454,9 @@ class mPosten extends anyC {
 				"widthRabatt" => ((isset($A->rabatt) AND $A->rabatt * 1 != 0) ? Util::formatNumber($fpdf->language, $A->rabatt * 1, 2)."%" : ""),
 				"widthRabattpreis" => $fpdf->formatCurrency($fpdf->language, $einzelpreis, true),
 				"widthGesamtNettoPosten" => (!(!$fpdf->showNullPreise AND $A->menge * $einzelpreis == 0)) ? $fpdf->formatCurrency($fpdf->language, $A->menge * $menge2 * $nettoPreis, $fpdf->showPositionenWaehrung, $fpdf->showDezimalstellen) : "",
-				"widthMwStBetrag" => ($A->mwst * 1 != 0 ? $fpdf->formatCurrency($fpdf->language, $A->menge * $menge2 * $mwstBetrag, $fpdf->showPositionenWaehrung) : ""),
-				"widthGesamt" => (!(!$fpdf->showNullPreise AND $A->menge * $einzelpreis == 0)) ? $fpdf->formatCurrency($fpdf->language,$A->menge * $menge2 * $einzelpreis, $fpdf->showPositionenWaehrung) : "",
-				"widthMwSt" => $A->mwst * 1 != 0 ? Util::formatNumber($fpdf->language, $A->mwst * 1, 2)."%" : ""
+				"widthMwStBetrag" => ($A->mwst * 1 != 0 ? $fpdf->formatCurrency($fpdf->language, $mwstBetragGesamt, $fpdf->showPositionenWaehrung) : ""),
+				"widthGesamt" => (!(!$fpdf->showNullPreise AND $A->menge * $gesamtpreis == 0)) ? $fpdf->formatCurrency($fpdf->language, $gesamtpreis, $fpdf->showPositionenWaehrung) : "",
+				"widthMwSt" => Util::formatNumber($fpdf->language, $A->mwst * 1, 2)."%"
 			);
 			
 			$priceColsContent = Aspect::joinPoint("prices", $this, __METHOD__, array($fpdf, $A, $priceColsContent), $priceColsContent);
