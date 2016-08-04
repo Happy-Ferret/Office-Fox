@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class Bericht_OffeneAngeboteNachArtikelGUI extends Bericht_default implements iBerichtDescriptor {
@@ -115,6 +115,7 @@ class Bericht_OffeneAngeboteNachArtikelGUI extends Bericht_default implements iB
  		$this->setColWidth("artikelnummer",40);
 		
  		$this->setFieldParser("menge","Bericht_OffeneAngeboteNachArtikelGUI::parserMenge");
+ 		$this->setFieldParser("name","Bericht_OffeneAngeboteNachArtikelGUI::parserName");
  		$this->setFieldParser("gesamtpreis","Bericht_OffeneAngeboteNachArtikelGUI::parserGesamt");
 		if(Session::isPluginLoaded("mLager")){
 			$this->setFieldParser("lager","Bericht_OffeneAngeboteNachArtikelGUI::parserLager");
@@ -158,6 +159,11 @@ class Bericht_OffeneAngeboteNachArtikelGUI extends Bericht_default implements iB
 
  		return parent::getPDF($save);
  	}
+	
+	public static function parserName($w){
+		return mb_substr($w, 0, 25);
+	}
+	
 	private static $lager = array();
 	public static function parserLager($w, $l, $p, $E){
 		$L = Lagerbestand::ofArtikel($E->A("oldArtikelID"));

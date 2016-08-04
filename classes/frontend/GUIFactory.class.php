@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class GUIFactory {
 
@@ -309,7 +309,7 @@ class GUIFactory {
 		if($showSF){
 			$B = new Button("Suche als Filter anwenden","./images/i2/searchFilter.png", "icon");
 			$B->style("float:right;");
-			$B->rme("HTML","","saveContextMenu", array("'searchFilter'","'$this->collectionName;:;'+$('quickSearch$this->collectionName').value"),"if(checkResponse(transport)) contentManager.reloadFrameRight();");
+			$B->rmePCR("HTML","","saveContextMenu", array("'searchFilter'","'$this->collectionName;:;'+$('quickSearch$this->collectionName').value"),"if(checkResponse(transport)) contentManager.reloadFrame('contentRight', '', 0);");
 
 			$mU = new mUserdata();
 			$K = $mU->getUDValue("searchFilterInHTMLGUI".$this->collectionName);
@@ -357,7 +357,7 @@ class GUIFactory {
 		}
 	}
 
-	public function getContainer($Table, $caption, $appended = ""){
+	public function getContainer($Table, $caption, $appended = "", $prepended = ""){
 		$widths = Aspect::joinPoint("changeWidths", $this, __METHOD__);
 		if($widths == null) $widths = array(700);
 
@@ -373,6 +373,7 @@ class GUIFactory {
 
 			return "
 			<div id=\"subFrameContainer$this->collectionName\" style=\"min-height:500px;\">
+				$prepended
 				<div style=\"width:$widths[0]px;\" class=\"backgroundColor1 Tab\">
 					<p>$newButton<span style=\"float:right;font-weight:normal;\">$pageBrowser</span>$caption</p><div style=\"clear:both;\"></div>
 				</div>
@@ -392,7 +393,7 @@ class GUIFactory {
 			if($this->isSelection)
 				$abort = $this->getAbortButton();
 
-			return $abort.Aspect::joinPoint("aboveList", $this, __METHOD__).$Table.$appended;
+			return $abort.$prepended.Aspect::joinPoint("aboveList", $this, __METHOD__).$Table.$appended;
 		}
 	}
 
@@ -542,9 +543,10 @@ class GUIFactory {
 				$wholeLine1 = array($this->getSettingsButton(), "".$this->multiPageDetails["total"]." ".($this->multiPageDetails["total"] != 1 ? "Einträge" : "Eintrag").", $wholeLine2");
 
 				$this->table->addRow($wholeLine1);
-				$this->table->addRowColspan(2, count($this->referenceLine) -1);
+				$this->table->addRowColspan(2, count($this->referenceLine) -1 == 1 ? 2 : count($this->referenceLine) -1); //or it will look quite bad with no entries
 				$this->table->addRowClass("backgroundColorHeader");
 				$this->table->setRowPart($where == "top" ? "thead" : "tfoot");
+				$this->table->addCellStyle(2, "text-align:left;");
 			}
 			
 			$this->table->addRowClass("backgroundColorHeader");
@@ -558,7 +560,7 @@ class GUIFactory {
 					$wholeLine1[] = "";
 				
 				$this->table->addRow($wholeLine1);
-				$this->table->addRowColspan(1, count($this->referenceLine) -1);
+				$this->table->addRowColspan(1, count($this->referenceLine) -1 == 1 ? 2 : count($this->referenceLine) -1); //or it will look quite bad with no entries
 				$this->table->addRowClass("backgroundColorHeader");
 				$this->table->addCellStyle(count($wholeLine1), "text-align:right;");
 				$this->table->setRowPart($where == "top" ? "thead" : "tfoot");
@@ -587,6 +589,7 @@ class GUIFactory {
 	public function buildNoEntriesLine(){
 		$this->table->addRow(array("Keine Einträge"));
 		$this->table->addRowColspan(1, count($this->referenceLine));
+		$this->table->addCellStyle(1, "text-align:left;");
 	}
 	
 	// <editor-fold defaultstate="collapsed" desc="buildNewEntryLine">
@@ -629,6 +632,7 @@ class GUIFactory {
 			$this->table->addRowColspan(2, count($this->referenceLine) - 1);
 			$this->table->addRowClass("backgroundColorHeader");
 			$this->table->setRowPart("thead");
+			$this->table->addCellStyle(2, "text-align:left;");
 			
 			$this->setColStyle(1, "width:20px;");
 		}

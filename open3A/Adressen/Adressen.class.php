@@ -15,19 +15,37 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Adressen extends anyC implements iPluginSpecificRestrictions {
 	function __construct() {
 		$this->setCollectionOf("Adresse");
 		$this->addAssocV3("AuftragID","=","-1");
-		$this->addOrderV3("KategorieID","ASC");// = "KategorieID ASC, firma, nachname";
-		$this->addOrderV3("firma","ASC");
-		$this->addOrderV3("nachname","ASC");
+		#$this->addOrderV3("nachname","ASC");
 	}
 	
 	function getPluginSpecificRestrictions(){
 		return array("pluginSpecificCanUse1xAdresse" => "kann NUR vorhandene und 1x-Adressen verwenden", "pluginSpecificCanUseProvision" => "kann NUR Adressen mit Provision verwenden");
 	}
+	
+	public function getEtiketten(){
+		$KID = BPS::getProperty("AdressenGUI", "etikettenKID", 0);
+		
+		#$Auftrag = new Auftrag($this->A("AuftragID"));
+		#$Adresse = new Adresse($Auftrag->A("AdresseID"));
+
+		$Stammdaten = Stammdaten::getActiveStammdaten();
+
+		$AC = anyC::get("Adresse", "type", "default");
+		$AC->addAssocV3("AuftragID", "=", "-1");
+		$AC->addAssocV3("KategorieID", "=", $KID);
+		
+		$a = array();
+		while($Ad = $AC->n())
+			$a[] = array($Stammdaten->A("firmaLang").", ".$Stammdaten->A("strasse")." ".$Stammdaten->A("nr").", ".$Stammdaten->A("plz")." ".$Stammdaten->A("ort").(ISO3166::getCountryToCode($Stammdaten->A("land")) != $Ad->A("land") ? ", ".ISO3166::getCountryToCode($Stammdaten->A("land")) : ""), $Ad->getFormattedAddress());
+		
+		return $a;
+	}
+
 }
 ?>

@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class CSVExport extends UnifiedTable {
 	private $spareNumerics = false;
@@ -38,7 +38,7 @@ class CSVExport extends UnifiedTable {
 		$csv = "";
 
 		if($this->header)
-			$csv .= utf8_decode("\"".implode("\";\"", $this->header)."\"$this->CSVNewline");
+			$csv .= utf8_decode($this->enclosedBy.implode($this->enclosedBy.$this->separator.$this->enclosedBy, $this->header).$this->enclosedBy."$this->CSVNewline");
 
 
 		foreach($this->content AS $v){

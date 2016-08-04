@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class KategorienGUI extends Kategorien implements iGUIHTMLMP2, iCategoryFilter {
 	function getHTML($id,$page){
@@ -27,6 +27,7 @@ class KategorienGUI extends Kategorien implements iGUIHTMLMP2, iCategoryFilter {
 			
 		$this->addAssocV3("type", "=", "3", "OR");
 		$this->addOrderV3("type", "ASC");
+		$this->addOrderV3("name", "ASC");
 		
 		$this->filterCategories();
 		$this->loadMultiPageMode($id, $page, 0);

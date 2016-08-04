@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class ISO3166 {
@@ -844,8 +844,8 @@ ZWE    ZW    Simbabwe";
 		return $countries;
 	}
 
-	public static function getCountryToCode($code, $lang = "de"){
-		$countries = self::getCountries($lang);
+	public static function getCountryToCode($code, $lang = "de", $length = 2){
+		$countries = self::getCountries($lang, $length);
 
 		return $countries[$code];
 	}
@@ -854,6 +854,10 @@ ZWE    ZW    Simbabwe";
 		$countries = self::getCountries($lang, $length);
 
 		return array_search($country, $countries);
+	}
+	
+	public static function getCode3ForCode2($code){
+		return self::getCodeToCountry(self::getCountryToCode($code, "de", 2), "de", 3);
 	}
 
 	public static function getZones($code){

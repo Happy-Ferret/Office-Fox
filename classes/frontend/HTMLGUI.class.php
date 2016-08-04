@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class HTMLGUI implements icontextMenu {
@@ -213,10 +213,14 @@ class HTMLGUI implements icontextMenu {
 			
 			case "addSaveDefaultButton":
 				$B = new Button("als Standard-Wert speichern", "./images/i2/save.gif");
-				$B->rme("mUserdata","","setUserdata",array("'DefaultValue".$class->getClearClass()."$par1'","$('$par1').value"),"checkResponse(transport);");
+				if($this->types[$par1] != "checkbox")
+					$B->rme("mUserdata","","setUserdata",array("'DefaultValue".$class->getClearClass()."$par1'","$('$par1').value", "''", "0", "1"),"checkResponse(transport);");
+				else
+					$B->rme("mUserdata","","setUserdata",array("'DefaultValue".$class->getClearClass()."$par1'","$('$par1').checked ? 1 : 0", "''", "0", "1"),"checkResponse(transport);");
 				$B->type("icon");
 				$B->style("float:right;");
-				$this->setInputStyle($par1,"width:90%;");
+				if($this->types[$par1] != "checkbox")
+					$this->setInputStyle($par1,"width:90%;");
 				$this->buttonsNextToFields[$par1] = $B;
 			break;
 			
@@ -229,8 +233,9 @@ class HTMLGUI implements icontextMenu {
 			
 			case "addAnotherLanguageButton":
 				$B = new Button("andere Sprachen", "./images/i2/sprache.png");
-				if($class->getID() != -1) $B->rme("mMultiLanguage","","getPopupHTML",array("'".$class->getClearClass()."'","'".$class->getID()."'","'".$par1."'"),"Popup.create(\'".$class->getID()."\', \'altLang".$class->getClearClass()."\', \'alternative Sprachen\'); Popup.update(transport, \'".$class->getID()."\', \'altLang".$class->getClearClass()."\');");
-				
+				if($class->getID() != -1) 
+					#$B->rme("mMultiLanguage","","getPopupHTML",array("'".$class->getClearClass()."'","'".$class->getID()."'","'".$par1."'"),"Popup.create(\'".$class->getID()."\', \'altLang".$class->getClearClass()."\', \'Alternative Sprachen\'); Popup.update(transport, \'".$class->getID()."\', \'altLang".$class->getClearClass()."\');");
+					$B->popup("", "Alternative Sprachen", "mMultiLanguage", "", "getPopupHTML", array("'".$class->getClearClass()."'","'".$class->getID()."'","'".$par1."'"));
 				else $B->onclick("alert('Sie müssen den Artikel zuerst speichern, bevor Sie Übersetzungen eintragen können')");
 				$B->type("icon");
 				$B->style("float:right;");
@@ -748,7 +753,7 @@ class HTMLGUI implements icontextMenu {
 			$s = "";
 			
 			$s .= "<input ".(isset($this->events[$as]) ? $eve : "")." ".(isset($this->inputStyle[$as]) ? "style=\"".$this->inputStyle[$as]."\"" : "")." type=\"checkbox\" value=\"1\" ".($this->attributes->$as == 1 ? " checked=\"checked\"" : "")." name=\"".$as."\" id=\"".$as."\"> ";
-			return "$s";
+			return (isset($this->buttonsNextToFields[$as]) ? $this->buttonsNextToFields[$as] : "")."$s";
 		}
 
 		if(isset($this->types[$as]) AND $this->types[$as] == "radio") {
@@ -938,13 +943,13 @@ class HTMLGUI implements icontextMenu {
 			return "An Error was caught. Please check the system log for additional information.";
 		}
 
-		$DesktopLinkButton = $this->getDesktopLinkButton();
+		#$DesktopLinkButton = $this->getDesktopLinkButton();
 			
 
 		$html .= "
 			<form id=\"$this->FormID\">
 				<div class=\"backgroundColor1 Tab\">
-					<p>".$this->getOperationsHTML($pluginName, $this->editedID).$DesktopLinkButton."".($this->labelCaption == null ? $this->name." editieren:" : $this->labelCaption)."</p>
+					<p>".$this->getOperationsHTML($pluginName, $this->editedID)."".($this->labelCaption == null ? $this->name." editieren:" : $this->labelCaption)."</p>
 				</div>
 				<div>
 				<table>
@@ -1112,22 +1117,34 @@ class HTMLGUI implements icontextMenu {
 		$string = "";
 		$top = "";
 		
+		if($lineWithId == -1 and count($this->prependedElements) > 0) 
+			foreach($this->prependedElements AS $E)
+				$top .= $E;
+		
 		$this->texts = $this->languageClass->getBrowserTexts();
 		$singularLanguageClass = $this->loadLanguageClass($this->singularClass);
 		
-		if(isset($_SESSION["phynx_errors"]) AND (!isset($_SESSION["HideErrors"]) OR $_SESSION["HideErrors"] == false) AND $lineWithId == -1 AND ($_SERVER["HTTP_HOST"] == "dev.furtmeier.lan" OR strpos(__FILE__, "nemiah") !== false)) $top .= "
+		
+		
+		if(isset($_SESSION["phynx_errors"]) AND (!isset($_SESSION["HideErrors"]) OR $_SESSION["HideErrors"] == false) AND $lineWithId == -1 AND ($_SERVER["HTTP_HOST"] == "dev.furtmeier.lan" OR strpos(__FILE__, "nemiah") !== false)) {
+			
+			$B = new Button("", "warning", "icon");
+			$B->style("float:left;margin-right:10px;");
+			$top .= "
 		<table>
 			<colgroup>
 				<col class=\"backgroundColor3\" />
 			</colgroup>
 			<tr>
 				<td>
-					<img style=\"float:left;margin-right:10px;\" src=\"./images/navi/warning.png\" />
+					$B
 					<b>Es ".(count($_SESSION["phynx_errors"]) != 1 ? "liegen" : "liegt")." ".count($_SESSION["phynx_errors"])." PHP-Fehler vor:</b><br />
-					<a href=\"javascript:windowWithRme('Util','','showPHPErrors','');\">Fehler anzeigen</a>,<br />
-					<a href=\"javascript:rme('Util','','deletePHPErrors','','contentManager.reloadFrameRight();');\">Fehler löschen</a></td>
+					<a href=\"#\" onclick=\"windowWithRme('Util','','showPHPErrors',''); return false;\">Fehler anzeigen</a>,<br />
+					<a href=\"#\" onclick=\"rme('Util','','deletePHPErrors','','contentManager.reloadFrameRight();'); return false;\">Fehler löschen</a></td>
 			</tr>
 		</table>";
+		}
+		
 		$userCanDelete = mUserdata::isDisallowedTo("cantDelete".$this->singularClass);
 		$userCanCreate = mUserdata::isDisallowedTo("cantCreate".$this->singularClass);
 		
@@ -1170,7 +1187,7 @@ class HTMLGUI implements icontextMenu {
 				if($oldValueForDisplayGroup != $sc->$f) if($lineWithId == -1) {
 					$dgf = $sc->$f."";
 					$kTv = (isset($this->displayGroup[$dgf]) ? $this->displayGroup[$dgf] : " ");
-					#if($this->dgParser != "") eval("\$kTv = ".$this->dgParser."(\"".$sc->$f."\",\"load\",\"".implode("%§%",$this->dgParserParameters)."\");");
+					
 					if($this->dgParser != "") $kTv = $this->invokeParser($this->dgParser, $sc->$f, implode("%§%",$this->dgParserParameters));
 					$string .= "
 				<tr class=\"kategorieTeiler\">
@@ -1203,10 +1220,14 @@ class HTMLGUI implements icontextMenu {
 					
 					if(isset($this->parsers[$as[$j]])) {
 						$parameters = $this->makeParameterStringFromArray($this->parserParameters[$as[$j]], $sc, $aid);
-						$t = $this->invokeParser($this->parsers[$as[$j]], $sc->$as[$j], $parameters);
+						$cf = $as[$j];
+						$t = $this->invokeParser($this->parsers[$as[$j]], $sc->$cf, $parameters);
 					}
-					else $t = htmlspecialchars($sc->$as[$j]);
-
+					else {
+						$v = $as[$j];
+						$t = htmlspecialchars($sc->$v);
+					}
+					
 					if($this->multiEditMode != null AND in_array($as[$j], $this->multiEditMode)) $string .= "
 					<td><input onfocus=\"oldValue = this.value;\" onblur=\"if(oldValue != this.value) saveMultiEditInput('".$this->singularClass."','".$aid."','".$as[$j]."');\" onkeydown=\"if(event.keyCode == 13) saveMultiEditInput('".$this->singularClass."','$aid','".$as[$j]."');\" type=\"text\" id=\"".$as[$j]."ID$aid\" value=\"".htmlspecialchars($t)."\" class=\"multiEditInput2\" /></td>";
 					else $string .= "
@@ -1344,7 +1365,7 @@ class HTMLGUI implements icontextMenu {
 			if($showSF){
 				$B = new Button("Suche als Filter anwenden","./images/i2/searchFilter.png", "icon");
 				$B->style("float:right;");
-				$B->rme("HTML","","saveContextMenu", array("'searchFilter'","'$this->quickSearchPlugin;:;'+$('quickSearch$this->quickSearchPlugin').value"),"if(checkResponse(transport)) contentManager.reloadFrameRight();");
+				$B->rmePCR("HTML","","saveContextMenu", array("'searchFilter'","'$this->quickSearchPlugin;:;'+$('quickSearch$this->quickSearchPlugin').value"),"if(checkResponse(transport)) contentManager.reloadFrame('contentRight', '', 0);");
 				
 				$mU = new mUserdata();
 				$K = $mU->getUDValue("searchFilterInHTMLGUI".$this->quickSearchPlugin);
@@ -1381,9 +1402,9 @@ class HTMLGUI implements icontextMenu {
 					$quickSearchRow
 					$multiPageRow$separator$filtered
 					".((!$this->onlyDisplayMode AND $this->selectionRow == "" AND $userCanCreate) ? "
-					<tr id=\"addNewRow\">
-						<td><img class=\"mouseoverFade\" onclick=\"contentManager.newClassButton('$this->singularClass',".($this->JSOnNew != null ? $this->JSOnNew : "''").");\" src=\"./images/i2/new.gif\" id=\"buttonNewEntry$this->singularClass\" /></td>
-						<td colspan=\"".($colspan+1)."\" style=\"font-weight:bold;\">".($singularLanguageClass == null ? $this->singularName." neu anlegen" : $singularLanguageClass->getBrowserNewEntryLabel())."</td>
+					<tr id=\"addNewRow\" class=\"backgroundColor0\" style=\"cursor:pointer;\" onclick=\"contentManager.newClassButton('$this->singularClass',".($this->JSOnNew != null ? $this->JSOnNew : "''").");\">
+						<td><img class=\"mouseoverFade\" src=\"./images/i2/new.gif\" id=\"buttonNewEntry$this->singularClass\" /></td>
+						<td colspan=\"".($colspan+1)."\" style=\"font-weight:bold;padding-top:10px;padding-bottom:10px;\">".($singularLanguageClass == null ? $this->singularName." neu anlegen" : $singularLanguageClass->getBrowserNewEntryLabel())."</td>
 					</tr>" : "" );
 		
 		if(isset($top)) foreach($this->addedRows as $key => $value)
@@ -1426,17 +1447,16 @@ class HTMLGUI implements icontextMenu {
 			</colgroup>";
 
 		$l = 1;
-		for($i=0;$i<count($this->attributes);$i++) {
+		for($i = 0; $i < count($this->attributes); $i++) {
 			$aid = $this->attributes[$i]->getID(); // get the id of an object separately
 			if($idAttribute)
 				$aid = $this->attributes[$i]->A($idAttribute);
+			
 			$sc = $this->attributes[$i]->getA(); // get the attributes-object from the object
-			$as = PMReflector::getAttributesArray($sc); // get an array of attribute-names from the object
 			$html .= "
 			<tr onclick=\"AC.update(13, '', '$random');\" onmouseover=\"AC.selectByMouse('autoCompleteTRId$l"."_$random');\" onmouseout=\"AC.SetMouseOut();\" id=\"autoCompleteTRId$l"."_$random\" style=\"cursor:pointer;\">";
 			
 			$modeFunction = "";
-			$actionCol = "";
 			if($mode != ""){
 				switch($mode){
 					case "quickSearchLoadFrame":
@@ -1447,7 +1467,12 @@ class HTMLGUI implements icontextMenu {
 						
 						$html .= "<td class=\"ACCell\" style=\"width:20px;\"><img src=\"./images/i2/edit.png\" /></td>";
 						$actionEditButton = "contentManager.backupFrame('".$bps["targetFrame"]."', 'lastCollection'); contentManager.loadFrame('".$bps["targetFrame"]."','$bps[targetPlugin]','$aid')";
-						if($this->JSOnEdit != null) $actionEditButton = str_replace("%%VALUE%%", $aid, $this->JSOnEdit);
+						if($this->JSOnEdit != null) {
+							$actionEditButton = str_replace("%%VALUE%%", $aid, $this->JSOnEdit);
+							if(isset($sc->value2))
+								$actionEditButton = str_replace("%%VALUE2%%", $sc->value2, $actionEditButton);
+						}
+						
 						$modeFunction = "<input type=\"hidden\" id=\"doACJS%attributeNameId$l"."_$random\" value=\"$actionEditButton\" />";
 
 					break;
@@ -1459,41 +1484,57 @@ class HTMLGUI implements icontextMenu {
 				}
 			}
 			
-			if(count($this->showAttributes) == 0)
-				for($j=0;$j<count($as);$j++) {
-					if(isset($this->dontShow[$as[$j]])) continue;
+			if(count($this->showAttributes) == 0){
+				$as = PMReflector::getAttributesArray($sc);
+				
+				for($j=0; $j<count($as); $j++) {
+					if(isset($this->dontShow[$as[$j]]))
+						continue;
 					
-					if($i == 0) $this->shownCols[] = $as[$j];
+					if($i == 0) 
+						$this->shownCols[] = $as[$j];
 					
 					if(isset($this->parsers[$as[$j]])) {
 						$parameters = $this->makeParameterStringFromArray($this->parserParameters[$as[$j]], $sc, $aid);
-						$t = $this->invokeParser($this->parsers[$as[$j]], $sc->$as[$j], $parameters);
-					#eval("\$t = ".$this->parsers[$as[$j]]."(\"".$sc->$as[$j]."\",\"load\",\"".implode("%§%",$this->parserParameters[$as[$j]])."\");");
+						$t = $this->invokeParser($this->parsers[$as[$j]], $sc->$as[$j], $parameters, $this->attributes[$i]);
+					
 					}
 					else $t = $sc->$as[$j];
 					
+					$onSelect = str_replace("%attributeName", $as[$j], $modeFunction);
+					#if($as[$j] == "value2")
+					#	$onSelect = str_replace("%value2", $t, $modeFunction);
+					
 					$html .= "
-					<td class=\"ACCell\">".$t."<input type=\"hidden\" value=\"".htmlspecialchars(strip_tags($t))."\" id=\"autoComplete".$as[$j]."Id$l"."_$random\" />".str_replace("%attributeName",$as[$j],$modeFunction)."</td>";
+					<td class=\"ACCell\">".$t."<input type=\"hidden\" value=\"".htmlspecialchars(strip_tags($t))."\" id=\"autoComplete".$as[$j]."Id$l"."_$random\" />".$onSelect."</td>";
 				}
-			else 
-				foreach($this->showAttributes as $key => $value) {
-					if($i == 0) $this->shownCols[] = $value;
+			} else 
+				foreach($this->showAttributes AS $key => $value) {
+				
+					if($i == 0) 
+						$this->shownCols[] = $value;
 										
 					if(isset($this->parsers[$value])){
 						$parameters = $this->makeParameterStringFromArray($this->parserParameters[$value], $sc, $aid);
-						$t = $this->invokeParser($this->parsers[$value], $sc->$value, $parameters);
+						$t = $this->invokeParser($this->parsers[$value], $sc->$value, $parameters, $this->attributes[$i]);
 					}
-						#eval("\$t = ".$this->parsers[$value]."(\"".$sc->$value."\",\"load\",\"".implode("%§%",$this->parserParameters[$value])."\");");
 					else $t = $sc->$value;
 					
+					$onSelect = str_replace("%attributeName", $value, $modeFunction);
+					#if($value == "value2")
+					#	$onSelect = str_replace("%value2", $sc->value2, $modeFunction);
+					
 					$html .= "
-					<td class=\"ACCell\">".$t."<input type=\"hidden\" value=\"".htmlspecialchars(strip_tags($t))."\" id=\"autoComplete".$value."Id$l"."_$random\" />".str_replace("%attributeName",$value, $modeFunction)."</td>";		
+					<td class=\"ACCell\">".$t."<input type=\"hidden\" value=\"".htmlspecialchars(strip_tags($t))."\" id=\"autoComplete".$value."Id$l"."_$random\" />".$onSelect."</td>";		
 				}
 			$l++;
+			
+			$html .= "</tr>";
 		}
-		if(count($this->attributes) == 0){
+		
+		if(count($this->attributes) == 0)
 			$html .= "<tr><td class=\"ACCell\">kein Ergebnis</td></tr>";
-		}
+		
 		$html .= "
 		</table>";
 		
@@ -1503,10 +1544,10 @@ class HTMLGUI implements icontextMenu {
 		return $html;
 	}
 	
-	protected function invokeParser($function, $value, $parameters){
+	protected function invokeParser($function, $value, $parameters, $object = null){
 		$c = explode("::", $function);
 		$method = new ReflectionMethod($c[0], $c[1]);
-		return $method->invoke(null, $value, "load", $parameters);
+		return $method->invoke(null, $value, $object != null ? $object : "load", $parameters);
 	}
 	
 	protected function makeParameterStringFromArray($array, $sc, $aid){
@@ -1515,7 +1556,8 @@ class HTMLGUI implements icontextMenu {
 			if(strpos($v,"\$sc->") !== false OR strpos($v,"\$") !== false ){
 				$v = str_replace("\$sc->","",$v);
 				$v = str_replace("\$","",$v);
-				$array[$k] = $sc->$v;
+				
+				$array[$k] = isset($sc->$v) ? $sc->$v : null;
 			} else
 				$array[$k] = $v;
 		}
@@ -1735,13 +1777,20 @@ class HTMLGUI implements icontextMenu {
 					$cFOBy = new $n();
 					$cFOBy = $cFOBy->getOrderByFields();
 					
-					foreach($cFOBy as $k => $v)
+					foreach($cFOBy AS $k => $v){
+						if(is_object($v))
+							$v = $v->label;
+						
 						$selectForOrderByField .= "<option ".($HKs == "$k;ASC" ? "selected=\"selected\"" : "")." value=\"$k;ASC\">".$v."</option>";
-					
+					}
 					$selectForOrderByField .= "</optgroup><optgroup label=\"absteigend\">";
 					
-					foreach($cFOBy as $k => $v)
+					foreach($cFOBy AS $k => $v){
+						if(is_object($v))
+							$v = $v->label;
+						
 						$selectForOrderByField .= "<option ".($HKs == "$k;DESC" ? "selected=\"selected\"" : "")." value=\"$k;DESC\">".$v."</option>";
+					}
 					
 					$selectForOrderByField .= "</optgroup></select>";
 					
@@ -1789,7 +1838,22 @@ class HTMLGUI implements icontextMenu {
 								<tr>
 									<td colspan=\"2\" class=\"backgroundColor3\">".$texts["nach Kategorien filtern"].":</td>
 								</tr>
-								$checks
+							</table>
+							<div style=\"max-height:250px;overflow:auto;\">
+								<table style=\"border:0px;\">
+									<colgroup>
+										<col class=\"backgroundColor2\" style=\"width:20px;\" />
+										<col />
+									</colgroup>
+									$checks
+								</table>
+							</div>
+							
+							<table style=\"border:0px;\">
+								<colgroup>
+									<col class=\"backgroundColor2\" style=\"width:20px;\" />
+									<col />
+								</colgroup>
 								<tr>
 									<td colspan=\"2\" class=\"backgroundColor3\">
 										<input
@@ -1877,7 +1941,7 @@ class HTMLGUI implements icontextMenu {
 			break;
 			
 			case "setOrderByField":
-				$v = split(";:;",$key);
+				$v = explode(";:;",$key);
 				
 				$mU = new mUserdata();
 				if($v[1] != "default")
@@ -2046,7 +2110,7 @@ class HTMLGUI implements icontextMenu {
 				
 				$B = new Button("Suche als Filter anwenden","./images/i2/searchFilter.png", "icon");
 				$B->style("float:right;");
-				$B->rme("HTML","","saveContextMenu", array("'searchFilter'","'$this->quickSearchPlugin;:;'+$('quickSearch$this->quickSearchPlugin').value"),"if(checkResponse(transport)) contentManager.reloadFrameRight();");
+				$B->rmePCR("HTML","","saveContextMenu", array("'searchFilter'","'$this->quickSearchPlugin;:;'+$('quickSearch$this->quickSearchPlugin').value"),"if(checkResponse(transport)) contentManager.reloadFrame('contentRight', '', 0);");
 
 				$mU = new mUserdata();
 				$K = $mU->getUDValue("searchFilterInHTMLGUI".$this->quickSearchPlugin);
@@ -2076,7 +2140,7 @@ class HTMLGUI implements icontextMenu {
 	// </editor-fold>
 
 	// <editor-fold defaultstate="collapsed" desc="getDesktopLinkSymbol">
-	public function getDesktopLinkButton(){
+	/*public function getDesktopLinkButton(){
 		try {
 		if(!PMReflector::implementsInterface(get_class($this->object), "iDesktopLink")) return "";
 		} catch(ReflectionException $e){
@@ -2088,7 +2152,7 @@ class HTMLGUI implements icontextMenu {
 		$B->onclick("DesktopLink.createNew('".$this->object->getClearClass()."','".$this->object->getID()."','contentLeft','".$_SESSION["applications"]->getActiveApplication()."');");
 
 		return $B;
-	}
+	}*/
 	// </editor-fold>
 
 }

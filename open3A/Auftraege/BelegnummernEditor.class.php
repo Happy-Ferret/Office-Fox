@@ -16,7 +16,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
 
  *   JahrMonat2Nummer.class.php by www.hc-media.org / office@hc-media.org
  */
@@ -28,9 +28,30 @@ class BelegnummernEditor extends Auftrag implements iReNr {
 	}
 
 	public static function getNextNumber($type, Auftrag $Auftrag = null) {
+		do {
+			$nummer = self::getNext($type, $Auftrag);
+		} while($nummer !== null AND self::exists($type, $nummer));
+		
+		return $nummer;
+	}
+	
+	private static function exists($type, $nummer){
+		$is = array("R", "L", "G", "B", "M", "A");
+		$AC = anyC::get("GRLBM", "nummer", $nummer);
+		if(in_array($type, $is))
+			$AC->addAssocV3("is$type", "=", "1");
+		else
+			$AC->addAssocV3 ("isWhat", "=", $type);
+
+		$F = $AC->n();
+		
+		return $F !== null;
+	}
+	
+	private static function getNext($type, Auftrag $Auftrag = null){
 		$S = Stammdaten::getActiveStammdaten();
-		$DB = new DBStorage();
-		$C = $DB->getConnection();
+		#$DB = new DBStorage();
+		#$C = $DB->getConnection();
 		
 		switch ($S->A("belegNummerResetR")) {
 			case "":
@@ -49,7 +70,7 @@ class BelegnummernEditor extends Auftrag implements iReNr {
 				$next = mUserdata::getGlobalSettingValue("belegNummerNext$type", 1);
 				
 				
-				$test = self::replace($S, 1, $S->A("belegNummerResetR") == "yearly", $Auftrag);
+				$test = self::replace($S, $next > 1 ? $next - 1 : 1, $S->A("belegNummerResetR") == "yearly", $Auftrag);
 				$AC = anyC::get("GRLBM");
 				if(strpos("RLGBMA", $type) !== false)
 					$AC->addAssocV3("is$type", "=", "1");
@@ -73,7 +94,7 @@ class BelegnummernEditor extends Auftrag implements iReNr {
 			
 		}
 		
-		return;
+		return null;
 	}
 	
 	private static function replace($S, $next, $wildcardMonth = false, Auftrag $Auftrag = null){
@@ -89,6 +110,8 @@ class BelegnummernEditor extends Auftrag implements iReNr {
 			$replace["{K}"] = $Auftrag->A("kundennummer") > 0 ? $Auftrag->A("kundennummer") : 0;
 
 		$nummer = $S->A("belegNummerFormatR");
+		if($nummer == "")
+			$nummer = "{J}{N:3}";
 		foreach($replace AS $k => $v)
 			$nummer = str_replace($k, $v, $nummer);
 

@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class open3ADesktopGUI extends ADesktopGUI implements iGUIHTML2 {
 	
@@ -46,10 +46,11 @@ class open3ADesktopGUI extends ADesktopGUI implements iGUIHTML2 {
 					$s = explode(";",$v);
 					if(isset($hiddenPlugins[$s[3]])) continue;
 					#if(!mUserdata::isDisallowedTo("cantCreate$s[4]")) continue;
-					
+					$B = new Button("", "./images/big/$s[1]", "icon");
+					$B->style("float:left;margin-right:30px;");
 					$html .= "
 						<div onclick=\"".str_replace("#",";",$s[2])."\" class=\"desktopButton\">
-							<img style=\"float:left;margin-right:30px;\" src=\"./images/big/$s[1]\" />
+							$B
 							
 							<p style=\"font-size:2.0em;font-weight:bold;color:#999999;\">$s[0]</p>
 							
@@ -67,18 +68,18 @@ class open3ADesktopGUI extends ADesktopGUI implements iGUIHTML2 {
 				
 				$hpVersion = null;
 				$html = "";
-				if(strpos($_SERVER["SCRIPT_FILENAME"],"demo") === false AND strpos($_SERVER["SCRIPT_FILENAME"],"demo_all") === false){
-					$version = Util::httpTestAndLoad("http://www.furtmeier.it/open3AcurrentVersion.php", 2);
-					
-					$XML = new XMLC();
-					$XML->setXML($version["_response"]);
-					try {
-						$XML->lCV3();
-						$t = $XML->getNextEntry();
-						if($t != null)
-							$hpVersion = $t->getA()->Version;
-					} catch (Exception $e){}
-				}
+				
+				$version = Util::httpTestAndLoad("http://www.furtmeier.it/open3AcurrentVersion.php", 2);
+
+				$XML = new XMLC();
+				$XML->setXML($version["_response"]);
+				try {
+					$XML->lCV3();
+					$t = $XML->getNextEntry();
+					if($t != null)
+						$hpVersion = $t->getA()->Version;
+				} catch (Exception $e){}
+				
 
 				$F = new File(Util::getRootPath()."system/Backup");
 
@@ -122,14 +123,13 @@ class open3ADesktopGUI extends ADesktopGUI implements iGUIHTML2 {
 							<p style=\"font-size:1.2em;font-weight:bold;color:#999999;\">Ein neues Backup der Datenbank anlegen.</p>
 						</div>";
 				
-				if(strpos($_SERVER["SCRIPT_FILENAME"],"demo") === false AND strpos($_SERVER["SCRIPT_FILENAME"],"demo_all") === false){
 						
-					if($hpVersion != null AND (Util::versionCheck($hpVersion, $this->currentVersion) OR Util::versionCheck($hpVersion, $this->currentVersion, "<"))) 
-						$html .= "
-							<div class=\"desktopButton\" onclick=\"window.open('http://www.open3a.de/', '_blank');\" style=\"height:auto;min-height:0px;\">
-								<p>".(Util::versionCheck($hpVersion, $this->currentVersion) ? "Auf der Homepage steht eine neue Version von open3A zur Verfügung ($hpVersion). Sie benutzen Version $this->currentVersion." : (Util::versionCheck($hpVersion, $this->currentVersion, "==") ? "Ihre open3A-Version ist auf dem aktuellen Stand." : "Ihr open3A ist aktueller als die Version auf der Homepage!"))."</p>
-							</div>";
-				}
+				if($hpVersion != null AND (Util::versionCheck($hpVersion, $this->currentVersion) OR Util::versionCheck($hpVersion, $this->currentVersion, "<"))) 
+					$html .= "
+						<div class=\"desktopButton\" onclick=\"window.open('http://www.open3a.de/', '_blank');\" style=\"height:auto;min-height:0px;\">
+							<p>".(Util::versionCheck($hpVersion, $this->currentVersion) ? "Auf der Homepage steht eine neue Version von open3A zur Verfügung ($hpVersion). Sie benutzen Version $this->currentVersion." : (Util::versionCheck($hpVersion, $this->currentVersion, "==") ? "Ihre open3A-Version ist auf dem aktuellen Stand." : "Ihr open3A ist aktueller als die Version auf der Homepage!"))."</p>
+						</div>";
+				
 				return $html;
 			break;
 			

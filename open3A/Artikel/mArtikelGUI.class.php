@@ -15,12 +15,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, icontextMenu, iCategoryFilter, iOrderByField, iSearchFilter {
 
 	public $isJoined = "";
-	public $searchFields = array("t1.name", "artikelnummer", "beschreibung", "bemerkung");
+	public $searchFields = array("t1.name", "artikelnummer", "beschreibung", "bemerkung", "artikelnummerHersteller", "EAN");
 	public static $ids = array();
 	public static $artikelMitStueckliste = array();
 	public static $artikelMitLieferant = array();
@@ -43,6 +43,7 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 				
 			$this->addJoinV3("Kundenpreis", "ArtikelID", "=", "ArtikelID");
 			$this->addJoinV3("Kundenpreis", "kundennummer", "=", $bps["kundennummer"]);
+			$this->addJoinV3("Kundenpreis", "KundenpreisVarianteArtikelID", "=", "0");
 			
 			$this->isJoined .= "K";
 		}
@@ -55,11 +56,17 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 			if($LID != "-1") {
 				$this->addJoinV3("LieferantPreis", "LieferantPreisLieferantID", "=", $LID);
 				$this->addAssocV3("LieferantPreisID", "IS NOT", "NULL");
-				#$this->isJoined = 4;
-			} else {
-				#$this->addJoinV3("LieferantPreis", "LieferantPreisLieferantID", "=", $LID);
+			} else 
 				$this->addAssocV3("LieferantPreisID", "IS", "NULL");
-			}
+		}
+		
+		if(Session::isPluginLoaded("mLager") AND BPS::getProperty("mArtikelGUI", "lagerFilter", "0") > 0){
+			$LID = BPS::getProperty("mArtikelGUI", "lagerFilter", "0");
+			$this->addJoinV3("Lagerbestand", "ArtikelID", "=", "LagerbestandOwnerClassID");
+			$this->addJoinV3("Lagerbestand", "LagerbestandOwnerClass", "=", "LArtikel");
+			$this->isJoined .= "A";
+
+			$this->addAssocV3("LagerbestandLagerID", "=", $LID);
 		}
 		
 		$this->customize();
@@ -69,6 +76,8 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 	function getAvailableCategories(){
 		$kat = new Kategorien();
 		$kat->addAssocV3("type","=","2");
+		$kat->addOrderV3("name");
+		
 		return $kat->getArrayWithKeysAndValues();
 	}
 	
@@ -127,7 +136,7 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 			$TLF->addTableClass("browserContainerSubHeight");
 			
 			$I = new HTMLInput("lieferantenFilter", "select", BPS::getProperty("mArtikelGUI", "lieferantFilter", "0"));
-			$I->setOptions(anyC::get("Lieferant"), "LieferantFirma", "alle Lieferanten", array(/*"-1" => "ohne Lieferant"*/));
+			$I->setOptions(anyC::get("Lieferant"), "LieferantFirma", "alle Lieferanten", array("-1" => "ohne Lieferant"));
 			$I->onchange(OnEvent::rme($this, "setLieferantFilter", array("this.value"), OnEvent::reload("Right")));
 			$TLF->addRow(array($I));
 		}
@@ -137,6 +146,35 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 
 	}
 
+	public function checkBestand(){
+		$checks = func_get_args();
+		
+		
+		foreach($checks AS $check){
+			$ex = explode(":", $check);
+			$ex2 = explode("_", $ex[0]);
+			$ex3 = explode(",", $ex[1]);
+			
+			if($ex3[0] == "melde")
+				$message = "<span style=\"color:orange\">Meldebestand von $ex3[2] Stück erreicht!</span> Im Lager: $ex3[1]";
+			
+			if($ex3[0] == "mindest")
+				$message = "<span style=\"color:red\">Mindestbestand von $ex3[2] Stück erreicht!</span> Im Lager: $ex3[1]";
+			
+			if($ex2[0] == "LArtikel"){
+				$Artikel = new Artikel($ex2[1]);
+				echo "<p class=\"prettySubtitle\">".$Artikel->A("name")."</p><p>$message</p>";
+			}
+			
+			if($ex2[0] == "VarianteArtikel"){
+				$Variante = new VarianteArtikel($ex2[1]);
+				#$Artikel = new Artikel($ex2[1]);
+				echo "<p class=\"prettySubtitle\">".$Variante->A("VarianteArtikelName")."</p><p>$message</p>";
+			}
+		}
+
+	}
+	
 	public function findOptions($AC){
 		while($A = $AC->n())
 			self::$ids[] = $A->getID();
@@ -183,34 +221,63 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 	}
 	
 	public static function buttonInfoOptions($E){
-		$BV = "";
+		$BUTT = array();
+		#$BV = "";
+		#if(Session::isPluginLoaded("mVariante"))
+		#	$BV = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+		$c = 0;
 		if(Session::isPluginLoaded("mVariante"))
-			$BV = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+			$c++;
 		
 		if(Session::isPluginLoaded("mVariante") AND Variante::has($E->getID())){
 			$BV = new Button("Dieser Artikel hat Varianten", "./open3A/Varianten/hasVariant.png", "icon");
 			$BV->style("float:right;margin-left:5px;margin-bottom:5px;");
+			$BUTT[] = $BV;
 		}
 		
-		$BS = "";
+		#$BS = "";
+		#if(Session::isPluginLoaded("mStueckliste"))
+		#	$BS = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
 		if(Session::isPluginLoaded("mStueckliste"))
-			$BS = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+			$c++;
 		
 		if(Session::isPluginLoaded("mStueckliste") AND isset(self::$artikelMitStueckliste[$E->getID()])){
 			$BS = new Button("Dieser Artikel hat eine Stückliste", "./openWaWi/Stueckliste/Stueckliste18.png", "icon");
 			$BS->style("float:right;margin-left:5px;margin-bottom:5px;");
+			$BUTT[] = $BS;
 		}
 		
-		$BL = "";
+		#$BL = "";
+		#if(Session::isPluginLoaded("mLieferant"))
+		#	$BL = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
 		if(Session::isPluginLoaded("mLieferant"))
-			$BL = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+			$c++;
 		
 		if(Session::isPluginLoaded("mLieferant") AND isset(self::$artikelMitLieferant[$E->getID()])){
 			$BL = new Button("Dieser Artikel hat Lieferanten", "./openWaWi/Lieferanten/Lieferant18.png", "icon");
 			$BL->style("float:right;margin-left:5px;margin-bottom:5px;");
+			$BUTT[] = $BL;
 		}
 		
-		return $BL.$BS.$BV;
+		#$BN = "";
+		#if(Session::isPluginLoaded("mSeriennummer"))
+		#	$BN = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+		if(Session::isPluginLoaded("mSeriennummer"))
+			$c++;
+		
+		if(Session::isPluginLoaded("mSeriennummer") AND $E->A("hatSeriennummer")){
+			$BN = new Button("Dieser Artikel hat Seriennummern", "./openWaWi/Seriennummer/Seriennummer18.png", "icon");
+			$BN->style("float:right;margin-left:5px;margin-bottom:5px;");
+			$BUTT[] = $BN;
+		}
+		
+		while(count($BUTT) < $c)
+			$BUTT[] = "<div style=\"float:right;margin-left:5px;margin-bottom:5px;width:18px;height:18px;\"></div>";
+		
+		if(isset($BUTT[3]))
+			unset($BUTT[3]);
+		
+		return implode("", $BUTT);
 	}
 	
 	public static function preisParser($w, $E){
@@ -223,17 +290,47 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 		return $w."%";
 	}
 
-	public function getACData($attributeName, $query, $asJSON = true){
+	public function getACData($attributeName, $query, $options = true){
+		$asJSON = true;
+		$byID = false;
+		$showBemerkung = false;
+		$KategorieID = 0;
+		if($options[0] == "{" AND mb_substr($options, -1) == "}"){
+			$options = json_decode($options);
+			if(isset($options->byID))
+				$byID = $options->byID;
+			
+			if(isset($options->showBemerkung))
+				$showBemerkung = $options->showBemerkung;
+			
+			if(isset($options->KategorieID))
+				$KategorieID = $options->KategorieID;
+		} else
+			$asJSON = $options;
+		
 		if(substr($query, 0, 3) == "ART"){
 			$id = substr($query, 3) - 10000;
 			$this->addAssocV3("ArtikelID", "=", $id);
 		} else {
+			$search = array("name","artikelnummer", "EAN", "artikelnummerHersteller");
+
+			if(Session::isPluginLoaded("mLieferant")){
+				$LP = anyC::getFirst("LieferantPreis", "LieferantPreisArtikelnummer", $query);
+				if($LP)
+					$this->addSearchCustom("ArtikelID", "=", $LP->A("LieferantPreisArtikelID"), "OR");
+			}
+		
 			$this->setSearchStringV3($query);
-			$this->setSearchFieldsV3(array("name", "artikelnummer"));
+			$this->setSearchFieldsV3($search);
 		}
+		if($KategorieID)
+			$this->addAssocV3 ("KategorieID", "=", $KategorieID, "AND", "123");
 		
-		$this->setFieldsV3(array("name AS label", "artikelnummer AS value", "CONCAT(artikelnummer, '<br />', beschreibung) AS description"));
-		
+		$this->setFieldsV3(array(
+			"name AS label", 
+			$byID ? "ArtikelID AS value" : "IF(artikelnummer = '', CONCAT('ART', t1.ArtikelID + 10000), artikelnummer) AS value", 
+			"CONCAT(IF(artikelnummer = '', CONCAT('ART', t1.ArtikelID + 10000), artikelnummer), '<br>', beschreibung".($showBemerkung ? ", '<br>', bemerkung" : "").") AS description"));
+
 		if($attributeName == "artikelnummer")
 			$this->setFieldsV3(array("artikelnummer AS label", "name AS value", "name AS description"));
 		
@@ -241,7 +338,7 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 		if(!$asJSON)
 			return $this;
 		
-		#$this->setParser("label", "AdressenGUI::parserACLabel");
+		#$this->setParser("value", "mArtikelGUI::parserACArtikelnummer");
 		echo $this->asJSON();
 	}
 	
@@ -264,6 +361,12 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 		if($settings != "")
 			$fields = explode(",", $settings);
 		
+		if(Session::isPluginLoaded("mLieferant")){
+			$LP = anyC::getFirst("LieferantPreis", "LieferantPreisArtikelnummer", $query);
+			if($LP)
+				$this->addSearchCustom("ArtikelID", "=", $LP->A("LieferantPreisArtikelID"), "OR");
+		}
+
 		$this->setSearchFieldsV3($fields);#array(/*"t".(2 + strlen($this->isJoined)).".name",*/"t1.name"/*,"bemerkung","beschreibung"*/,"artikelnummer","beschreibung"));
 		#$this->addAssocV3("t2.name","LIKE", "%$query%","AND","1");
 		$this->setFieldsV3(array("t1.name", "gebinde", "bemerkung", "beschreibung", "artikelnummer"));
@@ -316,11 +419,15 @@ class mArtikelGUI extends mArtikel implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 	public static function parserACName($w, $l, $p){
 		$p = HTMLGUI::getArrayFromParametersString($p);
 		$p[0] = str_replace("\n", " ", $p[0]);
-		return self::buttonInfoOptions(new Artikel($p[3]))."<div style=\"width:100px;overflow:hidden;float:right;color:grey;text-align:right;\">$p[2]<br /><small>$p[1]</small></div>".$w."<br /><small style=\"color:grey;\">".(strlen($p[0]) > 45 ? substr($p[0], 0, 45)."..." : $p[0])."</small>";
+		return self::buttonInfoOptions(new Artikel($p[3]))."<div style=\"float:right;color:grey;text-align:right;\">$p[2]<br /><small>$p[1]</small></div>".$w."<br /><small style=\"color:grey;\">".(strlen($p[0]) > 45 ? substr($p[0], 0, 45)."..." : $p[0])."</small>";
 	}
 	
 	public function setLieferantFilter($LieferantID){
 		BPS::setProperty("mArtikelGUI", "lieferantFilter", $LieferantID);
+	}
+	
+	public function setLagerFilter($LagerID){
+		BPS::setProperty("mArtikelGUI", "lagerFilter", $LagerID);
 	}
 	
 	public static function numberParser($w,$l){

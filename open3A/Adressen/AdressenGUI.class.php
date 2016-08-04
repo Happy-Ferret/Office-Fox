@@ -15,12 +15,12 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
-class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, icontextMenu, iSearchFilter, iCategoryFilter {
+class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, icontextMenu, iSearchFilter, iCategoryFilter, iOrderByField {
 	
 	protected $gui;
-	public $searchFields = array("nachname","vorname","firma","ort","strasse","kundennummer", "tel", "CONCAT(vorname, ' ', nachname)");
+	public $searchFields = array("nachname","vorname","firma","ort","strasse","kundennummer", "tel", "CONCAT(vorname, ' ', nachname)", "CONCAT(nachname, ' ', vorname)");
 	public $inAC = false;
 	public $searchLimit = 10;
 
@@ -77,6 +77,12 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 	}
 	
 	function getHTML($id, $page){
+		#$this->addOrderV3("KategorieID","ASC");// = "KategorieID ASC, firma, nachname";
+		#$this->addOrderV3("CONCAT(firma, nachname)","ASC");
+		$this->addOrderV3("KategorieID","ASC");// = "KategorieID ASC, firma, nachname";
+		$this->addOrderV3("firma","ASC");
+		$this->addOrderV3("nachname","ASC");
+		
 		$spec = mUserdata::getPluginSpecificData("Adressen");
 		if(isset($spec["pluginSpecificCanUseProvision"]) AND $id == -1){
 			$this->addJoinV3("Kappendix", "t1.AdresseID", "=", "AdresseID");
@@ -119,13 +125,49 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 		
 		$gui->setShowAttributes(array("firma"));
 		
-		$gui->setJSEvent("onNew","function() { contentManager.reloadFrameRight(); }");
+		#$gui->setJSEvent("onNew","contentManager.newClassButton('Adresse', function(){ contentManager.reloadFrameRight(); });");
 		
-
+		$T = new HTMLSideTable("left");
+		
+		if(Session::isPluginLoaded("mEtikette") AND Session::isPluginLoaded("Kategorien")){
+			$B = $T->addButton("Etiketten\ndrucken", "./ubiquitous/Etiketten/Etiketten.png");
+			$B->popup("", "Etiketten drucken", "Adressen", "-1", "etikettenPopup");
+		}
+		
 		#$bps = $this->getMyBPSData();
 
 		$gui->autoCheckSelectionMode(get_class($this));
-		return ($id == -1 ? $tab : "").$gui->getBrowserHTML($id);
+		return ($id == -1 ? $tab.$T : "").$gui->getBrowserHTML($id);
+	}
+	
+	public function etikettenPopup(){
+		$F = new HTMLForm("etiketten", array("etikette", "kategorie"));
+		$F->getTable()->setColWidth(1, 120);
+		
+		$AC = anyC::get("Kategorie");
+		$AC->addAssocV3("type","=","1");
+		$K = $AC->toArray("name", "Ohne Kategorie");
+			
+		$F->setType("kategorie", "select", 0, $K);
+		
+		$AC = anyC::get("Etikette");
+		$E = $AC->toArray("EtiketteName");
+		
+		$F->setType("etikette", "select", 0, $E);
+		
+		$F->setSaveRMEPCR("Etiketten anzeigen", "", "Adressen", "-1", "etikettenSave", OnEvent::closePopup("Adressen"));
+			
+		echo $F;
+	}
+	
+	public function etikettenSave($EID, $KID){
+		BPS::setProperty("EtiketteGUI", "className", "Adressen");
+		BPS::setProperty("EtiketteGUI", "classID", "-1");
+		
+		
+		BPS::setProperty("AdressenGUI", "etikettenKID", $KID);
+		
+		Red::redirect(OnEvent::window(new EtikettenPDFGUI($EID), "getPDF"));
 	}
 	
 	public static function DGParser($w, $l, $p = null){
@@ -174,8 +216,12 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 			if(trim($AP->A("AnsprechpartnerVorname")." ".$AP->A("AnsprechpartnerNachname")) != ""){
 				$TAP->insertSpaceAbove($AP->A("AnsprechpartnerPosition"));
 				$TAP->addLV("Name:", $AP->A("AnsprechpartnerVorname")." ".$AP->A("AnsprechpartnerNachname"));
-				if($AP->A("AnsprechpartnerTel") != "") $TAP->addLV("Telefon:", $AP->A("AnsprechpartnerTel"));
-				if($AP->A("AnsprechpartnerEmail") != "") $TAP->addLV("E-Mail:", $AP->A("AnsprechpartnerEmail"));
+				if($AP->A("AnsprechpartnerTel") != "")
+					$TAP->addLV("Telefon:", $AP->A("AnsprechpartnerTel"));
+				if($AP->A("AnsprechpartnerMobil") != "")
+					$TAP->addLV("Mobil:", $AP->A("AnsprechpartnerMobil"));
+				if($AP->A("AnsprechpartnerEmail") != "")
+					$TAP->addLV("E-Mail:", "<a href=\"mailto:".$AP->A("AnsprechpartnerEmail")."\">".$AP->A("AnsprechpartnerEmail")."</a>");
 			}
 		}
 
@@ -221,11 +267,11 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 		#$this->setParser("email", "AdressenGUI::parserACEmail");
 		}*/
 		
-
+		$this->addJoinV3("Kappendix", "AdresseID", "=", "AdresseID");
 		$this->setSearchStringV3($query);
-		$this->setSearchFieldsV3(array("firma", "nachname", "email"));
+		$this->setSearchFieldsV3($this->searchFields);
 		
-		$this->setFieldsV3(array("firma AS label", "AdresseID AS value", "vorname", "nachname", "CONCAT(strasse, ' ', nr, ', ', plz, ' ', ort) AS description","email", "firma"));
+		$this->setFieldsV3(array("firma AS label", "t1.AdresseID AS value", "vorname", "nachname", "CONCAT(strasse, ' ', nr, ', ', plz, ' ', ort) AS description","email", "firma"));
 		
 		$this->setLimitV3("10");
 		$this->setParser("label", "AdressenGUI::parserACLabel");
@@ -307,7 +353,7 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 				
 				$this->lCV3();
 
-				if($this->numLoaded() > 0){
+				if(Session::isPluginLoaded("Kunden") AND $this->numLoaded() > 0){
 					$AC = anyC::get("Kappendix");
 					while($A = $this->getNextEntry())
 						$AC->addAssocV3("AdresseID", "=", $A->getID(), "OR");
@@ -408,8 +454,10 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 			} else
 				$symbols .= "<img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/mobile.png\" title=\"$s[7]\" />";
 		}
-		if($s[6] != "") $symbols .= "<a href=\"mailto:$s[6]\"><img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/email.png\" title=\"$s[6]\" /></a>";
-		if($s[5] != "") $symbols .= "<img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/fax.png\" title=\"$s[5]\" />";
+		if($s[6] != "")
+			$symbols .= "<a href=\"mailto:$s[6]\"><img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/email.png\" title=\"$s[6]\" /></a>";
+		if($s[5] != "")
+			$symbols .= "<img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/fax.png\" title=\"$s[5]\" />";
 		if($s[4] != "") {
 			if(Session::isPluginLoaded("mTelefonanlage")){
 				$B = Telefonanlage::getCallButton($s[4]);
@@ -418,11 +466,12 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 			} else
 				$symbols .= "<img class=\"mouseoverFade\" style=\"float:right;margin-left:4px;\" src=\"./images/i2/telephone.png\" title=\"$s[4]\" />";
 		}
+		
 		return $symbols.((Session::isPluginLoaded("Kunden") AND $s[3] == "default" AND !$SM) ? 
 		"<img src=\"./images/i2/kunde.png\" title=\"Kundendaten anzeigen/erstellen\" onclick=\"contentManager.selectRow(this); contentManager.loadFrame('contentLeft', 'Kunde', -1, 0, 'KundeGUI;AdresseID:$s[2];action:Kappendix');\" style=\"float:left;margin-right:4px;\" class=\"mouseoverFade\" />" : "")
-		.(($_SESSION["S"]->checkForPlugin("Kundenpreise") AND $s[3] == "default" AND !$SM) ? "<img src=\"./images/i2/kundenpreis.png\" title=\"Kundenpreise festlegen\" onclick=\"contentManager.selectRow(this); contentManager.loadFrame('contentLeft','Kunde', -1, 0,'KundeGUI;AdresseID:$s[2];action:Kundenpreise');\" style=\"float:left;margin-right:4px;\" class=\"mouseoverFade\" />" : "")
-		.(($_SESSION["S"]->checkForPlugin("labelPrinter") AND $s[3] == "default") ? "<img src=\"./images/i2/printer.png\" title=\"Etikette mit Adresse drucken\" onclick=\"rme('labelPrinter','','printEtikette','$s[2]');\" style=\"float:left;margin-right:4px;\" class=\"mouseoverFade\" />" : "")
-		.($w != "" ? stripslashes($w).(($s[1] != "" OR $s[0] != "") ? "<br /><small>$s[0] $s[1]</small>" : "") : $s[0]." ".$s[1]);
+		.((Session::isPluginLoaded("Kundenpreise") AND $s[3] == "default" AND !$SM) ? "<img src=\"./images/i2/kundenpreis.png\" title=\"Kundenpreise festlegen\" onclick=\"contentManager.selectRow(this); contentManager.loadFrame('contentLeft','Kunde', -1, 0,'KundeGUI;AdresseID:$s[2];action:Kundenpreise');\" style=\"float:left;margin-right:4px;\" class=\"mouseoverFade\" />" : "")
+		.((Session::isPluginLoaded("labelPrinter") AND $s[3] == "default") ? "<img src=\"./images/i2/printer.png\" title=\"Etikette mit Adresse drucken\" onclick=\"rme('labelPrinter','','printEtikette','$s[2]');\" style=\"float:left;margin-right:4px;\" class=\"mouseoverFade\" />" : "")
+		."<div style=\"margin-left:".(21 + (Session::isPluginLoaded("Kundenpreise") ? 21 : 0) + (Session::isPluginLoaded("labelPrinter") ? 21 : 0))."px;\">".($w != "" ? stripslashes($w).(($s[1] != "" OR $s[0] != "") ? "<br /><small>$s[0] $s[1]</small>" : "") : $s[0]." ".$s[1])."</div>";
 	}
 
 	public static function doSomethingElse(){
@@ -452,5 +501,56 @@ class AdressenGUI extends Adressen implements iGUIHTMLMP2, iAutoCompleteHTML, ic
 	function getCategoryFieldName(){
 		return "t1.KategorieID";
 	}
+	
+	#public function getCategoryFieldLabel(array $KIDs){
+		
+	#}
+	
+	public function checkDoubles($strasse, $nr, $plz){
+		if(trim($strasse) == "")
+			return "";
+		
+		$AC = anyC::get("Adresse", "AuftragID", "-1");
+		$AC->addAssocV3("strasse", "LIKE", "$strasse%");
+		if($nr != "")
+			$AC->addAssocV3("nr", "=", "$nr");
+		if($plz != "")
+			$AC->addAssocV3("plz", "=", "$plz");
+		$AC->setLimitV3(10);
+		
+		$AC->lCV3();
+		
+		if($AC->numLoaded() == 0){
+			$B = new Button("", "bestaetigung", "icon");
+			$B->style("float:left;margin-right:5px;");
+					
+			die($B."<span style=\"color:grey;\">Keine ähnliche Adresse gefunden.</span>");
+		}
+		
+		if($AC->numLoaded() > 0){
+			$B = new Button("", "notice", "icon");
+			$B->style("float:left;margin-right:10px;");
+			
+			$L = new HTMLList();
+			$L->noDots();
+			#$T->weight("light");
+			while($A = $AC->n()){
+				$L->addItem($A->getShortAddress()."<br><small style=\"color:grey;\">".$A->A("strasse")." ".$A->A("nr")."<br>".$A->A("plz")." ".$A->A("ort")."</small>");
+				$L->addItemStyle("width:50%;display:inline-block;vertical-align:top;margin:0;margin-bottom:15px;");
+			}
+			die("<div class=\"highlight\" style=\"padding:5px;box-sizing:border-box;\">".$B."<span style=\"\">".$AC->numLoaded()." ähnliche Adresse".($AC->numLoaded() == 1 ? "" :"n")." gefunden.</span><div style=\"clear:both;height:10px;\"></div></div><div style=\"clear:both;height:10px;\"></div>".$L);
+		}
+		
+		
+	}
+
+	public function getOrderByFields() {
+		$o = new stdClass();
+		$o->label = "Firma/Nachname gemischt";
+		$o->orderBy = array("KategorieID", "CONCAT(firma, nachname)");
+		
+		return array($o);
+	}
+
 }
 ?>

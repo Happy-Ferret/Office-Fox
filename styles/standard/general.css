@@ -5,6 +5,7 @@
 
 html {
 	overflow-y: scroll;
+	-webkit-tap-highlight-color: rgba(255, 255, 255, 0);
 }
 
 @font-face { 
@@ -291,7 +292,7 @@ input[type=submit],
 select,
 .AJAXUpload,
 button {
-	width:90%;
+	width:calc(100% - 28px);
 }
 
 button.loading {
@@ -305,7 +306,7 @@ input[type=checkbox]{
 }
 
 textarea {
-	width:90%;
+	width:calc(100% - 28px);
 	background-color:transparent;
 	border:0px;
 	border-bottom-width:1px;
@@ -699,7 +700,7 @@ div + .Tab {
 }
 
 input[type=button][name=currentSaveButton], input[type=button][name=submitForm] {
-	width:99%;
+	width:100%;
 	text-transform:uppercase;
 }
 
@@ -903,6 +904,8 @@ input[type=button][name=currentSaveButton], input[type=button][name=submitForm] 
 	background-image: none !important;
 	background-color:#ddd !important;
 }
+
+.mce-i-phynximage:before{content:"\e014"}
 
 .achievementMessage {
 	position:fixed;

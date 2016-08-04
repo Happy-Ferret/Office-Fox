@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 function BackupManagerGUIFatalErrorShutdownHandler() {
 	$last_error = error_get_last();
@@ -69,13 +69,27 @@ class BackupManagerGUI implements iGUIHTML2 {
 		} catch(TableDoesNotExistException $e){
 			
 		}
+		
+		$SFTPServer = null;
+		try {
+			$SFTPServer = LoginData::get("BackupSFTPServerUserPass");
+		} catch(TableDoesNotExistException $e){
+			
+		}
 		$ST = new HTMLSideTable("right");
 		
 		$FTPServerID = $FTPServer == null ? -1 : $FTPServer->getID();
 		$BFTP = $ST->addButton("FTP-Server\neintragen", "./plugins/Installation/serverMail.png");
 		$BFTP->popup("edit", "FTP-Server", "LoginData", $FTPServerID, "getPopup", "", "LoginDataGUI;preset:backupFTPServer");
 		
+		if(extension_loaded("ssh2")){
+			$SFTPServerID = $SFTPServer == null ? -1 : $SFTPServer->getID();
+			$BSFTP = $ST->addButton("SFTP-Server\neintragen", "./plugins/Installation/serverMail.png");
+			$BSFTP->popup("edit", "SFTP-Server", "LoginData", $SFTPServerID, "getPopup", "", "LoginDataGUI;preset:backupSFTPServer");
+		}
 		
+		$B = $ST->addButton("Einstellungen\nzurücksetzen", "clear");
+		$B->rmePCR("BackupManager", "-1", "clearSettings");
 		
 		if(count($list) == 0)
 			return "$ST<p class=\"highlight\">Es wurden noch keine Sicherungen angelegt.</p>";
@@ -83,6 +97,18 @@ class BackupManagerGUI implements iGUIHTML2 {
 		return $ST.$TB;
 	}
 
+	public function clearSettings(){
+		$AC = anyC::get("Userdata", "name", "noBackupManager");
+		while($U = $AC->n())
+			$U->deleteMe ();
+		
+		$AC = anyC::get("Userdata", "name", "disableBackupManager");
+		while($U = $AC->n())
+			$U->deleteMe ();
+		
+		Red::messageD("Einstellungen zurückgesetzt");
+	}
+	
 	public function inPopup(){
 		if($_SESSION["S"]->isUserAdmin() == "0")
 			throw new AccessDeniedException();
@@ -194,13 +220,21 @@ class BackupManagerGUI implements iGUIHTML2 {
 				
 				try {
 					$ftpUpload = $this->FTPUpload(Util::getRootPath()."system/Backup/$BOK");
-					
 					if($ftpUpload === true){
 						$B = new Button("FTP-Upload erfolgreich","okCatch");
 						$B->type("icon");
 						$B->style("float:left;margin-right:10px;");
 
 						$T->addRow(array($B."Das Backup wurde erfolgreich auf den FTP-Server hochgeladen"));
+					}
+					
+					$sftpUpload = $this->SFTPUpload(Util::getRootPath()."system/Backup/$BOK");
+					if($sftpUpload === true){
+						$B = new Button("SFTP-Upload erfolgreich","okCatch");
+						$B->type("icon");
+						$B->style("float:left;margin-right:10px;");
+
+						$T->addRow(array($B."Das Backup wurde erfolgreich auf den SFTP-Server hochgeladen"));
 					}
 				} catch (Exception $e){
 					$B->image("warning");
@@ -298,7 +332,7 @@ class BackupManagerGUI implements iGUIHTML2 {
 	}
 	
 	private static function getNewBackupName(){
-		return Util::getRootPath()."system/Backup/".$_SESSION["DBData"]["datab"].".".date("Ymd").".sql";
+		return Util::getRootPath()."system/Backup/".$_SESSION["DBData"]["datab"].".".date("Ymd")."_utf8.sql";
 	}
 
 	public function makeBackupOfToday(){
@@ -308,7 +342,14 @@ class BackupManagerGUI implements iGUIHTML2 {
 		$F->loadMe();
 
 		if($F->getA() == null){
-			file_put_contents($F->getID(), "deny from all");
+			file_put_contents($F->getID(), "<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    Order Allow,Deny
+    Deny from all
+</IfModule>");
 			/*file_put_contents($F->getID(), "AuthUserFile ".Util::getRootPath()."system/Backup/.htpasswd
 AuthGroupFile /dev/null
 AuthName \"Restricted\"
@@ -354,11 +395,14 @@ require valid-user
 		$passwort = $FTPServer->A("passwort");
 
 		$connection_id = ftp_connect($ftp_server);
+		
+		if (!$connection_id) 
+			throw new Exception("Verbindung mit FTP-Server $ftp_server nicht möglich!");
 
 		$login_result = ftp_login($connection_id, $benutzername, $passwort);
 
-		if ((!$connection_id) || (!$login_result)) 
-			throw new Exception("Verbindung mit FTP-Server $ftp_server als Benutzer $benutzername nicht möglich!");
+		if (!$login_result) 
+			throw new Exception("Anmeldung als Benutzer $benutzername nicht möglich!");
 		
 		
 		$subDir = $FTPServer->A("optionen");
@@ -378,15 +422,55 @@ require valid-user
 		return true;
 	}
 	
+	public function SFTPUpload($filename){
+		$FTPServer = LoginData::get("BackupSFTPServerUserPass");
+		
+		if($FTPServer == null OR $FTPServer->A("server") == "")
+			return null;
+		
+		$ftp_server = $FTPServer->A("server");
+		$benutzername = $FTPServer->A("benutzername");
+		$passwort = $FTPServer->A("passwort");
+
+		#$connection_id = ftp_connect($ftp_server);
+
+		#$login_result = ftp_login($connection_id, $benutzername, $passwort);
+		
+		#if ((!$connection_id) || (!$login_result)) 
+		#	throw new Exception("Verbindung mit SFTP-Server $ftp_server als Benutzer $benutzername nicht möglich!");
+		
+		
+		$subDir = $FTPServer->A("optionen");
+		if($subDir != "" AND $subDir[strlen($subDir) - 1] != "/")
+			$subDir .= "/";
+		
+		$zieldatei = $subDir.basename($filename);
+		$lokale_datei = $filename;
+
+		#$upload = ftp_put($connection_id, $zieldatei, $lokale_datei, FTP_ASCII);
+		$upload = copy($lokale_datei, "ssh2.sftp://$benutzername:$passwort@$ftp_server/$zieldatei");
+		
+		if (!$upload)
+		  throw new Exception("Beim SFTP-Upload ist ein Fehler aufgetreten");
+		
+		#ftp_quit($connection_id);
+		
+		return true;
+	}
+	
 	public function restoreBackup($name){
 		if($_SESSION["S"]->isUserAdmin() == "0")
 			throw new AccessDeniedException();
 
 		require Util::getRootPath()."libraries/PMBP.inc.php";
 
-		$DB = new DBStorageU();
+		$DB = new DBStorage();
 		$con = $DB->getConnection();
-
+		if(strpos($name, "_utf8"))
+			mysqli_set_charset($con, "utf8");
+		else
+			mysqli_set_charset($con, "latin1");
+		
 		$file = fopen(Util::getRootPath()."system/Backup/$name", "r");
 
 		$return = PMBP_exec_sql($file, $con);

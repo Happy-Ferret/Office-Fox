@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Kunden extends anyC {
 	function __construct() {
@@ -85,7 +85,10 @@ class Kunden extends anyC {
 		}
 		
 		$KApp->setA($KAppA);
-		if($returnNewObject) return $KApp;
+		
+		if($returnNewObject)
+			return $KApp;
+		
 		return $KApp->newMe();
 	}
 }

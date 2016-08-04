@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class Brief extends UnpersistentClass {
@@ -87,7 +87,7 @@ class Brief extends UnpersistentClass {
 		$this->Posten = $P;
 	}
 	
-	public function PDFObjectFactory(){
+	public function PDFObjectFactory($SpracheID = null){
 		if($this->stammdaten == null) {
 			$_SESSION["messages"]->addMessage("No Stammdaten set. Please use setStammdaten() before calling PDFObjectFactory()!");
 			die("No Stammdaten set. See Message log for details.");
@@ -107,13 +107,16 @@ class Brief extends UnpersistentClass {
 			
 		if($this->Auftrag AND $this->Auftrag->A("AuftragVorlage") != "")
 			$n = $this->Auftrag->A("AuftragVorlage");
-		
+
 		#if($_SESSION["BPS"]->getProperty("Brief","templateType") == "Email" AND $SA->ownTemplateEmail != "") 
 		#	$n = $SA->ownTemplateEmail;
 			
+		if($this->target == "Email" AND $SA->ownTemplateEmailNew != "") 
+			$n = $SA->ownTemplateEmailNew;
+		
 		if($this->target == "Print" AND $SA->ownTemplatePrint != "") 
 			$n = $SA->ownTemplatePrint;
-		
+
 		$n = Aspect::joinPoint("template", $this, __METHOD__, array($this->Auftrag, $this->GRLBM), $n);
 		
 		$ud = new mUserdata();
@@ -124,9 +127,9 @@ class Brief extends UnpersistentClass {
 
 		if(BPS::getProperty("Brief", "templateType", "PDF") == "PDF3rd")
 			$n = mUserdata::getUDValueS("activePDF3rdTemplate", $n);
-		
+
 		try{
-			new $n();
+			new $n($this->stammdaten, $SpracheID);
 		} catch (ClassNotFoundException $e){
 			if(!defined("PHYNX_VIA_INTERFACE"))
 				die(Util::getBasicHTMLError("Die Vorlage $n konnte nicht gefunden werden.<br />Bitte überprüfen Sie, ob sich die Vorlage im specifics-Verzeichnis befindet.","Vorlagenfehler"));
@@ -134,7 +137,7 @@ class Brief extends UnpersistentClass {
 				throw $e;
 		}
 		
-		$this->letter = new $n($this->stammdaten);
+		$this->letter = new $n($this->stammdaten, $SpracheID);
 
 		return $this->letter;
 	}
@@ -148,8 +151,8 @@ class Brief extends UnpersistentClass {
 			$_SESSION["messages"]->addMessage("No Stammdaten set. Please use setStammdaten() before calling generate()!");
 			die("No Stammdaten set. See Message log for details.");
 		}
-		
-		$this->letter = ($pdfToUse == null ? $this->PDFObjectFactory() : $pdfToUse);
+
+		$this->letter = ($pdfToUse == null ? $this->PDFObjectFactory($this->Adresse != null ? $this->Adresse->A("AdresseSpracheID") : null) : $pdfToUse);
 
 		$this->letter->leasingrate = $this->leasingrate;
 		$this->letter->rabatt = $this->rabatt;
@@ -194,7 +197,7 @@ class Brief extends UnpersistentClass {
 			$this->letter->embedDataAsFile($F, "ZUGFeRD-invoice.xml");
 		}
 		
-		$this->letter->printPaymentQR();
+		$this->letter->printPaymentQR($this->stammdaten, $this->GRLBM);
 		
 		if($this->Zahlungsbedingungen != null)
 			$this->letter->printTextbaustein($this->Zahlungsbedingungen);

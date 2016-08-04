@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 var AuftraegeMessages = {
@@ -31,7 +31,7 @@ var AuftraegeMessages = {
 	E012: function(message) {return "pixelLetter Antwortet: \n"+message;},
 	E013: "Es wurde keine E-Mail-Adresse beim Kunden angegeben",
 	E014: "Bitte überprüfen Sie die Absender-Adresse des Benutzers und in den Stammdaten",
-	E015: "Bitte überprüfen Sie die E-Mail-Textbausteine. Eventuell ist kein Textbaustein als Standard markiert. Überprüfen Sie auch die Einstellungen im Kontextmenü des Symbols rechts neben 'per E-Mail verschicken.'",
+	//E015: "Bitte überprüfen Sie die E-Mail-Textbausteine. Eventuell ist kein Textbaustein als Standard markiert. Überprüfen Sie auch die Einstellungen im Kontextmenü des Symbols rechts neben 'per E-Mail verschicken.'",
 	
 	E016: "Kundennummer existiert nicht!",
 
@@ -59,11 +59,18 @@ var Auftrag = {
 	newestGRLBMID: null,
 	currentSection: null,
 	
+	checkBestand: function(t){
+		if(t.responseData.bestand && t.responseData.bestand != "")
+			Popup.load("Bestandsprüfung", "mArtikel", -1, "checkBestand", t.responseData.bestand);
+	},
+	
 	addArtikel: function(grlbmID, artikelID, onSuccessFunction){
 		var arg = arguments;
 		
-		contentManager.rmePCR("GRLBM", grlbmID, "getPostenCopy", [artikelID], function() {
+		contentManager.rmePCR("GRLBM", grlbmID, "getPostenCopy", [artikelID], function(t) {
 			Auftrag.reloadBeleg(grlbmID, onSuccessFunction);
+			
+			Auftrag.checkBestand(t);
 		});
 	},
 
@@ -139,14 +146,18 @@ var Auftrag = {
 	},
 
 	selectAdresse: function(onSuccessFunction){
+		contentManager.backupFrame('contentRight','selectionOverlay');
 		contentManager.loadFrame('contentRight','Adressen', -1, 0,'AdressenGUI;selectionMode:singleSelection,Auftrag,'+Auftrag.newestID+',getAdresseCopy,Auftraege,contentLeft,Auftrag,'+Auftrag.newestID+'', onSuccessFunction);
 	},
 
-	createEmpty: function(onSuccessFunction, addBeleg){
+	createEmpty: function(onSuccessFunction, addBeleg, AdresseID){
 		if(typeof addBeleg == "undefined")
 			addBeleg = "";
 		
-		contentManager.rmePCR("Auftraege", "-1", "createEmpty", addBeleg, function(transport){
+		if(typeof AdresseID == "undefined")
+			AdresseID = "";
+		
+		contentManager.rmePCR("Auftraege", "-1", "createEmpty", [addBeleg, AdresseID], function(transport){
 			Auftrag.newestID = transport.responseText; 
 			
 			if(typeof onSuccessFunction == "function")
@@ -174,6 +185,13 @@ var Auftrag = {
 			contentManager.restoreFrame('contentRight','selectionOverlay');
 		});
 	},
+	
+	/*createDelivery: function(nothing, AdresseID){
+		contentManager.rmePCR("Auftraege", -1, "createEmpty", ["L", AdresseID], function(transport){ 
+			contentManager.loadFrame("contentLeft", "LBestellung", transport.responseText);
+			contentManager.restoreFrame('contentRight','selectionOverlay');
+		});
+	},*/
 	
 	addFile: function(GRLBMID, fileID){
 		rmeP("GRLBM", GRLBMID, "addFile", fileID, "contentManager.loadFrame('subframe', 'GRLBM', "+GRLBMID+", 0)");
@@ -216,14 +234,15 @@ var Auftrag = {
 		if(typeof AnsprechpartnerID == "undefined")
 			AnsprechpartnerID = "0";
 
-		rmeP("Auftrag", Aid, "getViaEMailWindow", [GRLBMID, mode, AnsprechpartnerID], "if(checkResponse(transport)) { Popup.create("+Aid+", 'EMailPreview', 'E-Mail Vorschau'); Popup.update(transport, "+Aid+", 'EMailPreview'); }");
+		Popup.load("Per E-Mail verschicken", "Auftrag", Aid, "getViaEMailWindow", [GRLBMID, mode, AnsprechpartnerID], "", "edit", "{width: 600}");
+		//rmeP("Auftrag", Aid, "getViaEMailWindow", [GRLBMID, mode, AnsprechpartnerID], "if(checkResponse(transport)) { Popup.create("+Aid+", 'Auftrag', 'E-Mail Vorschau'); Popup.update(transport, "+Aid+", 'Auftrag'); }");
 
 	},
 
-	directMail: function(Aid, GRLBMID, recipient, subject, body){
+	directMail: function(Aid, GRLBMID, recipient, subject, body, attachments, otherRecipient){
 		if(!confirm(AuftraegeMessages.C001)) return;
 		
-		contentManager.rmePCR("Auftrag", Aid, "sendViaEmail", [GRLBMID, recipient, subject, body], function(){
+		contentManager.rmePCR("Auftrag", Aid, "sendViaEmail", [GRLBMID, recipient, subject, body, "1", attachments, otherRecipient], function(){
 			if(lastLoadedLeftPlugin == 'Bestellung')
 				contentManager.reloadFrame('contentLeft');
 			
@@ -236,10 +255,10 @@ var Auftrag = {
 
 	},
 
-	plSign: function(id, GRLBMID, recipient, subject, body){
+	plSign: function(id, GRLBMID, recipient, subject, body, otherRecipient){
 		if(!confirm('Soll diese Rechnung qualifiziert digital signiert werden?\nAchtung: dadurch entstehen Kosten.')) return;
 		//rmeP('Auftrag',id,'signLetter',[GRLBMID, recipient, subject, body],'checkResponse(transport); if($("GRLBM1xEMail")) $("GRLBM1xEMail").value = "";')
-		contentManager.rmePCR('Auftrag',id,'signLetter',[GRLBMID, recipient, subject, body], function(){ 
+		contentManager.rmePCR('Auftrag',id,'signLetter',[GRLBMID, recipient, subject, body, 1, otherRecipient], function(){ 
 			if($("GRLBM1xEMail"))
 				$("GRLBM1xEMail").value = "";
 			

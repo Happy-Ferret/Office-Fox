@@ -15,12 +15,13 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 class Adapter {
 	protected $ID;
 	protected $DBS = null;
+	protected $DBSLazy = null;
 	protected $parsers = array();
 	protected $file = "";
 	protected $affectedRowsOnly = false;
@@ -116,6 +117,8 @@ class Adapter {
 	function addSelectStatement($command, $value){
 		$c = array();
 		$c[] = $value;
+		if(!is_array($this->selectStatement->$command))
+			$this->selectStatement->$command = array();
 		$this->selectStatement->$command = array_merge($this->selectStatement->$command, $c);
 	}
 	
@@ -255,7 +258,6 @@ class Adapter {
 				$method = new ReflectionMethod($s[0], $s[1]);
 				$A->$key = $method->invoke(null, $A->$key, "load");
 			}
-			#if(isset($A->$key)) eval("\$A->\$key = ".$value."(\"".$A->$key."\",\"load\");");
 
 		return $A;
 	}
@@ -349,6 +351,16 @@ class Adapter {
 			}
 				
 		}
+		
+		if(!isset($this->selectStatement->searchCustom))
+			return;
+		
+		foreach($this->selectStatement->searchCustom AS $v){
+			$this->addSelectStatement("whereFields",$v[0]);
+			$this->addSelectStatement("whereOperators", $v[1]);
+			$this->addSelectStatement("whereValues",$v[2]);
+			$this->addSelectStatement("whereLogOp",$v[3]);
+		}
 	}
 
 	/**
@@ -358,38 +370,39 @@ class Adapter {
 	 * 
 	 * @param $typsicher[optional](Boolean) Determines if execution is typesafe
 	 */
-	function lCV4($typsicher = false){
+	function lCV4($lazyload = false){
 		$this->parseSearchString();
-		if($this->DBS == null) $this->getConnection();
+		if($this->DBS == null) 
+			$this->getConnection();
 
 		if(count($this->selectStatement->fields) == 0)
 			$this->selectStatement->fields[0] = "*";
 
-		#if(!in_array($this->selectStatement->table[0]."ID",$this->selectStatement->fields) AND !in_array("*",$this->selectStatement->fields))
 		$this->selectStatement->fields[] = "t1.".$this->selectStatement->table[0]."ID"; //This is REQUIRED or else objects with values from a joined table may not get an id (if same colname appears in more than one table)
 		
 		$this->DBS->setParser($this->parsers);
 		if($this->affectedRowsOnly) $this->affectedRowsOnly = false;
 
-		#if(!$typsicher)
-		$return = $this->DBS->loadMultipleV4($this->selectStatement);
-		#else return $this->DBS->loadMultipleT($this->selectStatement);
+		$return = $this->DBS->loadMultipleV4($this->selectStatement, $lazyload);
 		if($return != null AND is_array($return))
 			foreach($return AS $k => $v)
 				$v->parsers = $this->hasParsers;
+		
+		if($return != null AND is_object($return))
+			$return->parsers = $this->hasParsers;
 		
 		return $return;
 	}
 	
 	/**
 	 * Same as lCV4, but without typesafe capabilities.
-	 * 
+	 * @deprecated since version 20160218
 	 * @return Object All objects matching selectStatement
 	 */
 	function lCV3(){
 		$this->parseSearchString();
 		if($this->DBS == null) $this->getConnection();
-		
+
 		if($this->selectStatement->AttributesClassName == "") 
 			$this->selectStatement->AttributesClassName = $this->selectStatement->table[0].(count($this->selectStatement->joinTables) > 0 ? "Join" : "")."Attributes";
 			

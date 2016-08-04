@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 
@@ -27,37 +27,67 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 		$this->customize();
 	}
 
-	public function addToList() {
-		$_SESSION["BPS"]->setActualClass(get_class($this));
-		$bps = $_SESSION["BPS"]->getAllProperties();
+	public function addToList($type = null, $fromDate = null, $prefix = null) {
+		#$_SESSION["BPS"]->setActualClass(get_class($this));
+		$bps = BPS::getAllProperties(get_class($this));#$_SESSION["BPS"]->getAllProperties();
 		
 		$pSpecData = mUserdata::getPluginSpecificData("Auftraege");
 		
-		if($bps == -1 OR !isset($bps["add"])) return;
-		else $what = $bps["add"];
+		
+		$what = $type;
+		
+		if(isset($bps["add"]) AND $bps["add"] != "") 
+			$what = $bps["add"];
 			
+		if($what === null)
+			return;
+		
 		$bps = $_SESSION["BPS"]->getAllProperties();
 		
 		$gs = anyC::get("GRLBM");
-		if($what != "Kalk") $gs->addAssocV3("is$what","=","1");
-		else $gs->addAssocV3("isWhat","=","$what");
+		if($what != "Kalk") 
+			$gs->addAssocV3("is$what","=","1");
+		else 
+			$gs->addAssocV3("isWhat","=","$what");
+		
 		$gs->addAssocV3("isPrinted","=","0");
-		if($what != "M") $gs->addJoinV3("Auftrag","AuftragID","=","AuftragID");
-		if($what != "M") $gs->addAssocV3("auftragDatum","IS","NOT NULL");
+		
+		if($what != "M") 
+			$gs->addJoinV3("Auftrag", "AuftragID", "=", "AuftragID");
+		
+		if($what != "M") 
+			$gs->addAssocV3("auftragDatum", "IS", "NOT NULL");
 
-		if($what == "R") $gs->addAssocV3("isPayed","!=","2"); //keine stornierten Rechnungen
+		if($what == "R") 
+			$gs->addAssocV3("isPayed","!=","2"); //keine stornierten Rechnungen
 
-		if(isset($pSpecData["pluginSpecificCanOnlyEditOwn"])) $gs->addAssocV3("UserID","= ",$_SESSION["S"]->getCurrentUser()->getID());
+		if($fromDate != null AND $fromDate != ""){
+			$gs->addAssocV3("datum", ">=", Util::CLDateParser($fromDate, "store"));
+			BPS::setProperty("mpb", "fromDate", $fromDate);
+		} else
+			BPS::unsetProperty("mpb", "fromDate");
+		
+		if($prefix != null AND $prefix != ""){
+			$gs->addAssocV3("prefix", "=", $prefix);
+			BPS::setProperty("mpb", "prefix", $prefix);
+		} else
+			BPS::unsetProperty("mpb", "prefix");
+		
+		if(isset($pSpecData["pluginSpecificCanOnlyEditOwn"])) 
+			$gs->addAssocV3("UserID","= ",$_SESSION["S"]->getCurrentUser()->getID());
 		
 		Aspect::joinPoint("alterQuery", $this, __METHOD__, array($gs));
 		
 		$newIds = array();
 		while(($t = $gs->getNextEntry())){
-			if(isset($bps["ids"]) AND strstr($bps["ids"],",,".$t->getID().",,")) continue;
+			if(isset($bps["ids"]) AND strstr($bps["ids"],",,".$t->getID().",,")) 
+				continue;
+			
 			$newIds[] = $t->getID();
 		}
-		$_SESSION["BPS"]->setACProperty("add","");
-		$_SESSION["BPS"]->setACProperty("ids",(isset($bps["ids"]) ? $bps["ids"] : ",,").implode(",,",$newIds).(count($newIds) > 0 ? ",," : ""));
+		
+		BPS::unsetProperty("multiPrintBasketGUI", "add", "");
+		BPS::setProperty("multiPrintBasketGUI", "ids", (isset($bps["ids"]) ? $bps["ids"] : ",,").implode(",,", $newIds).(count($newIds) > 0 ? ",," : ""));
 	}
 
 	public function emptyList() {
@@ -79,9 +109,9 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 		$gs = new anyC();
 		$gs->setCollectionOf("GRLBM");
 		
-		$_SESSION["BPS"]->setActualClass("multiPrintBasketGUI");
-		$bps = $_SESSION["BPS"]->getAllProperties();
-
+		#$_SESSION["BPS"]->setActualClass("multiPrintBasketGUI");
+		$bps = BPS::getAllProperties("multiPrintBasketGUI");#$_SESSION["BPS"]->getAllProperties();
+		#print_r($bps);
 		if(!isset($bps["ids"])) {
 			$bps = array();
 			$bps["ids"] = ",,";
@@ -104,62 +134,69 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 	
 	function getHTML($id){
 		$bps = $this->getMyBPSData();
-		if($bps != -1 AND isset($bps["add"]) AND $bps["add"] != "") $this->addToList();
+		#if($bps != -1 AND isset($bps["add"]) AND $bps["add"] != "")
+		#	$this->addToList();
 			
 
 		$pSpecData = mUserdata::getPluginSpecificData("Auftraege");
 
-		$BE = new Button("Liste\nleeren","clear");
-		$BE->className("backgroundColor2");
-		#$BE->rmePCR("multiPrintBasket", "", "emptyList", "", "",'multiPrintBasketGUI;-');
+		$BE = new Button("Liste\nleeren","clear", "icon");
 		$BE->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'multiPrintBasketGUI;-');");
-		#rme('multiPrintBasket', '', 'emptyList', '', "loadFrameV2('contentLeft','multiPrintBasket');",'multiPrintBasketGUI;-');
-
+		$BE->style("float:right;");
+		
 		#$BK = new Button("Neue Kalkulationen hinzufügen","kalkulation");
 		#$BK->type("icon");
 		#$BK->style("float:right;margin-right:3px;");
 		#$BK->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:Kalk');");
 
 		$BM = new Button("Neue Mahnungen hinzufügen", "mahnung", "icon");
-		$BM->style("float:right;margin-right:3px;");
-		$BM->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:M');");
-
+		$BM->style("margin-right:5px;");
+		#$BM->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:M');");
+		$BM->rmePCR("multiPrintBasket", "-1", "addToList", array("'M'", "\$j('[name=conditionFromDate]').val()", "\$j('[name=conditionPrefix]').val()"), "contentManager.editInPopup('multiPrintBasket','','multiDruck-Liste');");
+		
 		$BG = new Button("Neue Gutschriften hinzufügen", "gutschrift", "icon");
-		$BG->style("float:right;margin-right:3px;");
-		$BG->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:G');");
-
+		$BG->style("margin-right:5px;");
+		#$BG->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:G');");
+		$BG->rmePCR("multiPrintBasket", "-1", "addToList", array("'G'", "\$j('[name=conditionFromDate]').val()", "\$j('[name=conditionPrefix]').val()"), "contentManager.editInPopup('multiPrintBasket','','multiDruck-Liste');");
+		
 		$BR = new Button("Neue Rechnungen hinzufügen","rechnung", "icon");
-		$BR->style("float:right;margin-right:3px;");
-		$BR->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:R');");
-
+		$BR->style("margin-right:5px;");
+		#$BR->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:R');");
+		$BR->rmePCR("multiPrintBasket", "-1", "addToList", array("'R'", "\$j('[name=conditionFromDate]').val()", "\$j('[name=conditionPrefix]').val()"), "contentManager.editInPopup('multiPrintBasket','','multiDruck-Liste');");
+		
 		Aspect::joinPoint("buttonRechnungen", $this, __METHOD__, array($BR));
 		
 		$BL = new Button("Neue Lieferscheine hinzufügen", "lieferschein", "icon");
-		$BL->style("float:right;margin-right:3px;");
-		$BL->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:L');");
-
+		$BL->style("margin-right:5px;");
+		#$BL->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:L');");
+		$BL->rmePCR("multiPrintBasket", "-1", "addToList", array("'L'", "\$j('[name=conditionFromDate]').val()", "\$j('[name=conditionPrefix]').val()"), "contentManager.editInPopup('multiPrintBasket','','multiDruck-Liste');");
+		
 		$BA = new Button("Neue Angebote hinzufügen","angebot", "icon");
-		$BA->style("float:right;margin-right:3px;");
-		$BA->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:A');");
-
+		$BA->style("margin-right:5px;");
+		#$BA->onclick("contentManager.loadFrame('editDetailsContentmultiPrintBasket','multiPrintBasket','',0,'_multiPrintBasketGUI;add:A');");
+		$BA->rmePCR("multiPrintBasket", "-1", "addToList", array("'A'", "\$j('[name=conditionFromDate]').val()", "\$j('[name=conditionPrefix]').val()"), "contentManager.editInPopup('multiPrintBasket','','multiDruck-Liste');");
+		
 		#<input type=\"button\" class=\"bigButton backgroundColor2\" value=\"\" style=\"background-image:url(./images/navi/clear.png);\" onclick=\"\" />
-		$html = "
-		<!--<div class=\"backgroundColor1 Tab\"><p>multiDruck Liste:</p></div>-->
-		<table>
-			<colgroup>
-				<col class=\"backgroundColor3\" />
-			</colgroup>
-			<tr>
-				<td>
-					".($_SESSION["applications"]->getActiveApplication() == "open3A" ? "
-					
+		
+
+		$T = new HTMLTable(1);
+		$T->addRow(($_SESSION["applications"]->getActiveApplication() == "open3A" ? "
 					".(!isset($pSpecData["pluginSpecificCanOnlySeeKalk"]) ? "
 					$BM$BG$BR$BL$BA" : "")." " : "")."
-					$BE
-					</td>
-			</tr>
-		</table>";
-
+					$BE");
+		$T->addRowClass("backgroundColor4");
+		
+		$ID = new HTMLInput("conditionFromDate", "date", BPS::getProperty("mpb", "fromDate"));
+		$ID->style("width:100px;text-align:right;");
+		
+		$IP = new HTMLInput("conditionPrefix", "text", BPS::getProperty("mpb", "prefix"));
+		$IP->style("width:50px;");
+		
+		$T->addRow("<div style=\"width:150px;display:inline-block;\">Ab: ".$ID."</div><div style=\"width:150px;display:inline-block;margin-left:10px;\">Präfix: ".$IP."</div>");
+		$T->addRowClass("backgroundColor4");
+		
+		#$html = $T;
+		
 		$htmlB = "<table style=\"margin-top:10px;\">
 			<colgroup>
 				<col class=\"backgroundColor3\" />
@@ -175,7 +212,7 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 			$BPL = new Button("mit PixelLetter\nverschicken","./open3A/PixelLetter/pl.png", "bigButton");
 			$BPL->contextMenu("PL", "sendViaMultiPrint", "Versenden via", "right", "up");
 			$BPL->loading();
-			$BPL->className("backgroundColor2");
+			#$BPL->className("backgroundColor2");
 			$BPL->style("float:right;");
 			#$BPL->onclick("if(confirm('Rechnungen jetzt mit PixelLetter signieren und verschicken?')) ");
 			#$BPL->popup("mpbLog", "PL-Versand Logbuch", "multiPrintBasket", "", "sendViaPL");
@@ -209,12 +246,15 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 			$BUP->type("icon");
 			#<img id=\"printedSymbol".$t->getID()."\" class=\"mouseoverFade\" onclick=\"rme('GRLBM','".$t->getID()."','markMeAsUnprinted','','$(\'printedSymbol".$t->getID()."\').style.display=\'none\';');\" src=\"./images/i2/printeds.png\" title=\"bereits gedruckt (klicken Sie, um den gedruckt-Status wieder aufzuheben)\" />
 
+			$BD = new Button("Von Liste entfernen", "./images/i2/delete.gif", "icon");
+			$BD->onclick($subFromMultiPrint);
+			
 			$htmlB .= "
 			<tr>
 				<td>".str_replace("Kalk","K",$t->getMyPrefix()).$M.$t->getA()->nummer."</td>
 				<td>$OK</td>
 				<td>".($t->getA()->isPrinted == 1 ? $BUP : "")."</td>
-				<td><img src=\"./images/i2/delete.gif\" title=\"Von Liste entfernen\" onclick=\"$subFromMultiPrint\" class=\"mouseoverFade\" /></td>
+				<td>$BD</td>
 			</tr>";
 		}
 
@@ -279,10 +319,8 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 
 		$htmlB .= "</table>";
 
-		$html .= "
-		</table>";
 
-		$html = "<div style=\"overflow:auto;max-height:500px;\">$html$Tab$htmlB</div>";
+		$html = "<div style=\"overflow:auto;max-height:500px;\">$T$Tab$htmlB</div>";
 
 		return $html;
 	}
@@ -388,7 +426,7 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 		$i = 0;
 		while(($t = $gs->getNextEntry())){
 			if($i++ != 0)
-				$pdf->AddPage('',true);
+				$pdf->AddPage('', true);
 			
 			#$_SESSION["BPS"]->registerClass("Brief");
 			#$_SESSION["BPS"]->setProperty("Brief","GRLBMID",$t->getID());
@@ -402,7 +440,7 @@ class multiPrintBasketGUI extends UnpersistentClass implements iGUIHTML2 {
 			$pdf->nbTag = "{nb$i}";
 			$A = new AuftragGUI($AuftragID);
 			$A->getGRLBMPDF($copy, $pdf, $t->getID());
-			$pdf->addReplacement("{nb$i}",$pdf->PageNo());
+			$pdf->addReplacement("{nb$i}", $pdf->PageNo());
 		}
 		
 		$filename = $brief->getMultiDruckOutput(true);

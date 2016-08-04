@@ -15,16 +15,71 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class mUserdata extends anyC {
 	function __construct() {
 		$this->setCollectionOf("Userdata");
 	}
 	
-	public function loadDataOfUser($UserID = 0){
+	protected function roles($role = null){
+		$roles = array(
+			"Verkäuferin" => array(
+				"Auftraege" => array("pluginSpecificCanOnlyEditOwn"), 
+				#"Adressen" => array("pluginSpecificCanUseProvision"), 
+				"Provisionen" => array("pluginSpecificHideEK"), 
+				"mAkquise" => array("pluginSpecificCanSeeOnlyOwn"),
+				"cantEdit" => array("WAdresse", "Adresse"),
+				"cantDelete" => array("WAdresse", "Adresse")
+			),
+			"Vertriebsleiterin" => array(
+				"Auftraege" => array("pluginSpecificCanOnlyEditOwn"), 
+				"mAkquise" => array("pluginSpecificCanSeeOnlyOwn"),
+				"cantEdit" => array("WAdresse", "Adresse"),
+				"cantDelete" => array("WAdresse", "Adresse")
+			),
+			"Geschäftsführerin" => array(
+				"mStatistik" => array("pluginSpecificCanUseControlling"),
+				"Auftraege" => array("pluginSpecificCanSetPayed", "pluginSpecificCanRemovePayed"),
+				"Provisionen" => array("pluginSpecificCanGiveProvisions")
+			),
+			"Buchhalterin" => array(
+				"Auftraege" => array("pluginSpecificCanSetPayed", "pluginSpecificCanRemovePayed")
+			),
+			"Lagerverwalterin" => array(
+				"mLager" => array("pluginSpecificCanResetLager")
+			)
+		);
+	
+	
+		foreach($roles AS $l => $s)
+			foreach($s AS $plugin => $rule){
+				if($plugin == "cantEdit" OR $plugin == "cantDelete")
+					continue;
+			
+				try {
+					new $plugin();
+					continue;
+				} catch (ClassNotFoundException $e){
+					#unset($roles[$l]);
+					unset($roles[$l][$plugin]);
+				}
+			}
+		
+		$roles = Aspect::joinPoint("roles", $this, __METHOD__, array($roles), $roles);
+		
+		if($role != null)
+			return $roles[$role];
+		
+		
+		return $roles;
+	}
+	
+	public function loadDataOfUser($UserID = 0, $typ = null){
 		if($UserID == 0) $UserID = $_SESSION["S"]->getCurrentUser()->getID();
 		$this->addAssocV3("UserID","=",$UserID);
+		if($typ != null)
+			$this->addAssocV3 ("typ", "=", $typ);
 		$this->lCV3();
 	}
 	
@@ -57,9 +112,9 @@ class mUserdata extends anyC {
 		return $labels;
 	}
 	
-	public static function getHiddenPlugins(){
+	public static function getHiddenPlugins($skipCache = false){
 		$Cache = SpeedCache::getCache("getHiddenPlugins");
-		if($Cache !== null)
+		if(!$skipCache AND $Cache !== null)
 			return $Cache;
 
 		$UD = new mUserdata();
@@ -109,7 +164,7 @@ class mUserdata extends anyC {
 		return $labels;
 	}
 	
-	public static function getPluginSpecificData($forPlugin){
+	public static function getPluginSpecificData($forPlugin, $value = null){
 		if(Session::currentUser() === null)
 			return array();
 		
@@ -124,6 +179,10 @@ class mUserdata extends anyC {
 			$A = $sUD->getA();
 			$labels[$A->name] = $A->wert;
 		}
+		
+		if($value != null)
+			return isset($labels[$value]);
+		
 		return $labels;
 	}
 	
@@ -131,10 +190,10 @@ class mUserdata extends anyC {
 	 * You can get Userdata with this function.
 	 * Returns null if name does not exist
 	 */
-	public function getUserdata($name, $UserID = 0){
+	public function getUserdata($name, $UserID = 0, $typ = null){
 
 		if($this->collector == null) 
-			$this->loadDataOfUser($UserID);
+			$this->loadDataOfUser($UserID, $typ);
 		
 		$r = null;
 		
@@ -198,14 +257,26 @@ class mUserdata extends anyC {
 	}
 
 	public static function getGlobalSettingValue($name, $defaultValue = null){
+		$useCache = false;
+		#echo $name."\n";
+		if($name == "activeCustomizer")
+			$useCache = true;
+		
+		if($useCache AND SpeedCache::inStaticCache("mUserdata::getGlobalSettingValue".$name))
+			return SpeedCache::getStaticCache("mUserdata::getGlobalSettingValue".$name);
+		
 		$UD = new mUserdata();
 		$UD->addAssocV3("UserID", "=", "-1");
 		$UD->addAssocV3("name", "=", $name);
 
 		$e = $UD->getNextEntry();
-		if($e == null) return $defaultValue;
+		if($e == null){
+			SpeedCache::setStaticCache("mUserdata::getGlobalSettingValue".$name, $defaultValue);
+			return $defaultValue;
+		}
 		
-		return $e->getA()->wert;
+		SpeedCache::setStaticCache("mUserdata::getGlobalSettingValue".$name, $e->A("wert"));
+		return $e->A("wert");
 		
 	}
 
@@ -228,7 +299,7 @@ class mUserdata extends anyC {
 		if($UserID == 0)
 			$UserID = $_SESSION["S"]->getCurrentUser()->getID();
 			
-		$UD = $this->getUserdata($name, $UserID);
+		$UD = $this->getUserdata($name, $UserID, $typ);
 
 		if($UD == null){
 			$nUD = new Userdata(-1);
@@ -253,10 +324,17 @@ class mUserdata extends anyC {
 		if($_SESSION["S"]->getCurrentUser() == null) return;#throw new Exception("No user authenticated with the system!");
 		if($_SESSION["S"]->isUserAdmin()) return;
 		
-		$UD = new mUserdata();
-		$UD->addAssocV3("wert","=",$restriction);
-		$UD->addAssocV3("UserID","=",$_SESSION["S"]->getCurrentUser()->getID());
-		$sUD = $UD->getNextEntry();
+		if(SpeedCache::inStaticCache("checkRestrictionOrDie$restriction"))
+			$sUD = SpeedCache::getStaticCache("checkRestrictionOrDie$restriction", true);
+		else {
+			$UD = new mUserdata();
+			$UD->addAssocV3("wert", "=", $restriction);
+			$UD->addAssocV3("UserID", "=", Session::currentUser()->getID());
+			$sUD = $UD->getNextEntry();
+			
+			SpeedCache::setStaticCache("checkRestrictionOrDie$restriction", $sUD);
+		}
+		
 		if($sUD != null)
 			Red::errorD("Diese Aktion ist nicht erlaubt!");
 	}

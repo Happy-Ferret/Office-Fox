@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 	function getHTML($id){
@@ -72,7 +72,13 @@ class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 		$gui->setParser("firma","mStammdatenGUI::firmaParser",array("\$sc->vorname","\$sc->nachname")); # only works because \$sc->vorname is eval'd while $sc is set in HTMLGUI.class.php
 		*/
 		
+		$gui->options(true, true, false);
+		
 		$ST = new HTMLSideTable("left");
+		
+		$B = $ST->addButton("Neuer\nTextbaustein", "new");
+		$B->popup("", "Neuer Textbaustein", "Textbausteine", "-1", "newTBPopup");
+		
 		$ST->addRow("R: Rechnung");
 		$ST->addRow("L: Lieferschein");
 		$ST->addRow("G: Gutschrift");
@@ -83,55 +89,37 @@ class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 		$ST->addRow("M: Rechnung");
 		$ST->addRow("Std: Standard für diese Kategorie");
 		
-		/*$html = "";
-		if($id == -1) $html = "
-		<div class=\"backgroundColor1 Tab\"><p>Erklärung</p></div>
-		<table>
-			<colgroup>
-				<col style=\"width:30px;\" class=\"backgroundColor3\" />
-				<col class=\"backgroundColor2\" />
-			</colgroup>
-			<tr>
-				<td style=\"text-align:right;\">R:</td><td>Standard-Textbaustein für Rechnungen</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">L:</td>
-				<td>Standard-Textbaustein für Lieferscheine</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">G:</td>
-				<td>Standard-Textbaustein für Gutschriften</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">A:</td>
-				<td>Standard-Textbaustein für Angebote</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">O:</td>
-				<td>Standard-Textbaustein für Bestellungen</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">P:</td>
-				<td>Standard-Textbaustein für Preisanfragen</td>
-			</tr>
-			<!--<tr>
-				<td style=\"text-align:right;\">B:</td>
-				<td>Standard-Textbaustein für Bestätigungen</td>
-			</tr>
-			<tr>
-				<td style=\"text-align:right;\">M:</td>
-				<td>Standard-Textbaustein für Mahnungen</td>
-			</tr>-->
-			<tr>
-				<td style=\"text-align:right;\">Std:</td>
-				<td>Standard-Textbaustein für diese Kategorie</td>
-			</tr>
-		</table>";*/
+		
 		$gui->prepend($ST);
 		try {
 			return $gui->getBrowserHTML($id);#.$html;
 		} catch (Exception $e){ }
 	}		
+	
+	public function newTBPopup(){
+		$t = Textbaustein::types();
+		
+		$Tab = new HTMLTable(2, "Textbausteinarten");
+		$Tab->useForSelection();
+		$Tab->weight("light");
+		
+		foreach($t AS $k => $v){
+			$B = new Button("Textbaustein erstellen", "arrow_left", "iconic");
+			
+			$Tab->addRow(array($B, $v));
+			$Tab->addRowEvent("click", OnEvent::rme($this, "newTBAction", array("'$k'"), OnEvent::frame("contentLeft", "Textbaustein", "transport.responseText").OnEvent::reload("Right").OnEvent::closePopup("Textbausteine")));
+		}
+		
+		echo $Tab;
+	}
+	
+	public function newTBAction($KID){
+		$F = new Factory("Textbaustein");
+		
+		$F->sA("KategorieID", $KID);
+		
+		echo $F->store();
+	}
 	
 	public static function parserDG($id){
 		if(isset($_SESSION["TBKategorien"][$id]))
@@ -153,14 +141,21 @@ class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 		
 		$TBs = isset($_SESSION["TBVariables"][$KategorieID]) ? $_SESSION["TBVariables"][$KategorieID] : array();
 		
-		$TBs = Aspect::joinPoint("append", $this, __METHOD__, array($TBs, $KategorieID), $TBs);
+		$additional = Aspect::joinPoint("append", $this, __METHOD__, array($TBs, $KategorieID), array());
+		foreach($additional AS $k => $v){
+			if(is_array($v)){
+				foreach($v AS $k2 => $v2)
+					if($v2 != "")
+						$TBs[] = $v2;
+			} else 
+				if($v != "")
+					$TBs[] = $v;
+		}
 		
 		die($this->formatVariables($TBs, isset($_SESSION["TBVariablesConditions"][$KategorieID]) ? $_SESSION["TBVariablesConditions"][$KategorieID] : array()));
-		#
-		#echo count($TBs) === 0 ? "nil" : implode(";", $TBs);
 	}
 	
-	private function formatVariables($V, $C = array()){
+	private function formatVariables($V, $C = array()){#<span style=\"color:orange;\" class=\"var"+v+" mceNonEditable\">{"+v+"}</span>
 		$T = "";
 		foreach($V AS $k => $v){
 			$T .= "<div style=\"cursor:pointer;\" onclick=\"tinyMCE.activeEditor.execCommand('mceInsertContent', false, '{".$v."}');\" id=\"TBVal$k\">{".$v."}</div>";
@@ -183,6 +178,8 @@ class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 		$html .= $E->A("isBStandard") == 1 ? " B " : "";
 		$html .= $E->A("isOStandard") == 1 ? " O " : "";
 		$html .= $E->A("isPStandard") == 1 ? " P " : "";
+		$html .= $E->A("isTStandard") == 1 ? " T " : "";
+		$html .= $E->A("isWStandard") == 1 ? " W " : "";
 		
 		return $html;
 	}
@@ -195,9 +192,9 @@ class TextbausteineGUI extends Textbausteine implements iGUIHTML2 {
 		#$k->addTBKategorie("E-Mail Belege Betreff", "41");
 		$k->addTBKategorie("E-Mail Belege", "42");
 
-		$k->addTBVariables("1",array("Anrede","+1Woche","+2Wochen","+3Wochen","+1Monat","+3Monate", "+#Tage", "Gesamtsumme","Rabatt:#%", "Benutzername"));
-		$k->addTBVariables("2",array("Anrede","+1Woche","+2Wochen","+3Wochen","+1Monat","+3Monate", "Benutzername"));
-		$k->addTBVariables("3",array("Anrede","+1Woche","+2Wochen","+3Wochen","+1Monat","+3Monate", "Gesamtsumme","Rabatt:#%","Benutzername"));
+		$k->addTBVariables("1",array("Anrede","+1Woche","+2Wochen","+3Wochen","+6Wochen","+1Monat","+3Monate", "Kalenderwoche", "Kalenderwoche-1", "+#Tage", "Gesamtsumme","Rabatt:#%", "Benutzername", "IBAN", "BIC", "MandatID"));
+		$k->addTBVariables("2",array("Anrede","+1Woche","+2Wochen","+3Wochen","+6Wochen","+1Monat","+3Monate", "Kalenderwoche", "Kalenderwoche-1", "Benutzername", "IBAN", "BIC", "MandatID"));
+		$k->addTBVariables("3",array("Anrede","+1Woche","+2Wochen","+3Wochen","+6Wochen","+1Monat","+3Monate", "Kalenderwoche", "Kalenderwoche-1", "Gesamtsumme","Rabatt:#%","Benutzername", "IBAN", "BIC", "MandatID"));
 		
 		#$k->addTBVariables("41",array("Firmenname","Belegnummer","Belegdatum"));
 		$k->addTBVariables("42",array("Anrede","Firmenname","Benutzername","Belegnummer","Belegdatum", "Rechnungsnummer", "Gesamtsumme", "+1Woche","+2Wochen","+3Wochen","+1Monat", "+#Tage"));

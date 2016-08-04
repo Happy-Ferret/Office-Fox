@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class LoginDataGUI extends LoginData implements iGUIHTML2 {
 	function getHTML($id){
@@ -105,7 +105,7 @@ class LoginDataGUI extends LoginData implements iGUIHTML2 {
 			$gui->type("name", "hidden");
 			$this->changeA("name", "MailServerUserPass");
 
-			$gui->descriptionField("server", "Für eine verschlüsselte Verbindung tragen Sie ein: Protokoll://server.de:Port<br />Also zum Beispiel tls://smtp.1und1.de:465");
+			$gui->descriptionField("server", "Für eine verschlüsselte Verbindung tragen Sie ein: Protokoll://server.de:Port<br />Also zum Beispiel tls://smtp.1und1.de:465 oder tls://smtp.strato.de:465");
 			
 			$gui->type("optionen", "hidden");
 		}
@@ -216,6 +216,24 @@ class LoginDataGUI extends LoginData implements iGUIHTML2 {
 			$gui->label("optionen", "Verzeichnis");
 			#$gui->type("optionen", "hidden");
 		}
+		
+		if($bps != -1 AND isset($bps["preset"]) AND $bps["preset"] == "backupSFTPServer"){
+			$BAbort = new Button("Abbrechen", "stop");
+			$BAbort->onclick("Popup.close('LoginData', 'edit');");
+			$BAbort->style("float:right;");
+			
+			$html = "<p style=\"padding:5px;\">{$BAbort}<small>Sie müssen hier nur Einstellungen vornehmen, wenn Sie die Backups automatisch auf einen SFTP-Server hochladen möchten.</small></p>";
+
+			$gui->type("UserID", "hidden");
+			$this->changeA("UserID", "-1");
+
+			$gui->type("name", "hidden");
+			$this->changeA("name", "BackupSFTPServerUserPass");
+
+			$gui->descriptionField("optionen", "Bitte geben Sie hier das Unterverzeichnis an, in das die Datei hochgeladen werden soll");
+			$gui->label("optionen", "Verzeichnis");
+			#$gui->type("optionen", "hidden");
+		}
 
 		if($bps != -1 AND isset($bps["preset"]) AND ($bps["preset"] == "googleData" OR $bps["preset"] == "GoogleAccountUserPass")){
 
@@ -258,6 +276,29 @@ class LoginDataGUI extends LoginData implements iGUIHTML2 {
 			$gui->type("optionen", "hidden");
 			$gui->type("server", "hidden");
 			$gui->type("passwort", "hidden");
+		}
+		
+		if($bps != -1 AND isset($bps["preset"]) AND $bps["preset"] == "adServer"){
+
+			$this->changeA("UserID", "-1");
+			$this->changeA("name", "ADServerUserPass");
+			#$html = "";
+			
+			/*
+			$gui->label("benutzername", "API-Key");
+			$gui->type("optionen", "hidden");
+			$gui->type("server", "hidden");
+			$gui->type("passwort", "hidden");*/
+			$gui->type("name", "hidden");
+			$gui->type("UserID", "hidden");
+			
+			$gui->label("server", "AD-Server");
+			$gui->label("optionen", "Benutzer-Pfad");
+			
+			$gui->descriptionField("benutzername", "Mit Domain-Name. Z.B. Administator@Furtmeier.dom");
+			$gui->descriptionField("optionen", "Bitte geben Sie den LDAP-Pfad zum Benutzer-Verzeichnis ein. Z.B. OU=Benutzer,DC=furtmeier,DC=dom");
+			
+			$onSave = "Popup.close('Users', 'edit');";
 		}
 
 		#$gui->label("benutzername", "Benutzername");

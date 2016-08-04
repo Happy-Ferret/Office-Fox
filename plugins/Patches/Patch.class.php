@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Patch extends PersistentObject {
 	function alterTables(){
@@ -41,9 +41,9 @@ class Patch extends PersistentObject {
 				$_SESSION["messages"]->addMessage("It's a MySQL-Patch!");
 				$this->alterTables();
 			break;
-			case "php":
-				eval($this->A("PatchValue"));
-			break;
+			#case "php":
+			#	eval($this->A("PatchValue"));
+			#sbreak;
 		}
 
 		$this->changeA("patchExecuted", "1");#->patchExecuted = 1;

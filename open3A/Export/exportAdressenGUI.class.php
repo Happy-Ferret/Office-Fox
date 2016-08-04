@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class exportAdressenGUI extends exportDefault implements iExport, iGUIHTML2 {
 
@@ -29,7 +29,37 @@ class exportAdressenGUI extends exportDefault implements iExport, iGUIHTML2 {
 		return array("open3A", "lightCRM");
 	}
 
-	public function getExportCollection(){
+	public function getHTML($id){
+		$p = parent::getHTML($id);
+		
+		$text = "";
+		$fields = array();
+		$AC = anyC::get("Adresse", "AuftragID", "-1");
+		$num = $AC->getTotalNum();
+		if($num > 2000){
+			$fields[] = "anzahl";
+			$fields[] = "start";
+			
+			$text = "<p>Ihre Datenbank enthält $num Datensätze. Bitte geben Sie den Startdatensatz sowie eine Anzahl ein, um eine Auswahl zu exportieren.</p>";
+		}
+		
+		if(Session::isPluginLoaded("mAdressBuch"))
+			$fields[] = "CK1";
+		
+		$T = new HTMLForm("exportSubset", $fields, "Auswahl");
+		$T->getTable()->setColWidth(1, 120);
+		
+		if(Session::isPluginLoaded("mAdressBuch")){
+			$T->setLabel("CK1", "Adressbuch");
+			$T->setType("CK1", "select", null, mAdressBuchGUI::getABs(true));
+		}
+		
+		$T->setDescriptionField("start", "Zum Beispiel bei Anzahl 1000: 1, 1001, 2001, 3001, ...");
+		
+		return $text.$p.$T;
+	}
+
+	public function getExportCollection($start = null, $count = null, $Adressbuch = 0){
 		$ac = new anyC();
 		$ac->setCollectionOf("Kategorie");
 		$ac->addAssocV3("type", "=", "1");
@@ -42,8 +72,13 @@ class exportAdressenGUI extends exportDefault implements iExport, iGUIHTML2 {
 		$ac->setCollectionOf("Adresse");
 		$ac->addJoinV3("Kappendix", "AdresseID", "=", "AdresseID");
 		$ac->addAssocV3("AuftragID", "=", "-1");
+		if(Session::isPluginLoaded("mAdressBuch") AND $Adressbuch)
+			$ac->addAssocV3("type", "=", $Adressbuch);
+		
 		$ac->setFieldsV3(array(
 			"anrede",
+			"nachname",
+			"vorname",
 			"anrede AS Anrede",
 			"firma AS Firma",
 			"vorname AS Vorname",
@@ -61,14 +96,19 @@ class exportAdressenGUI extends exportDefault implements iExport, iGUIHTML2 {
 			"KategorieID AS Kategorie",
 			"t1.bemerkung AS Bemerkung",
 			"kundennummer AS Kundennummer",
-			"t2.UStIdNr AS UStIdNr"));
+			"t2.UStIdNr AS UStIdNr",
+			"anrede AS Anrede2"));
 
+		if($start AND $count)
+			$ac->setLimitV3 ("$start, $count");
+		
 		return $ac;
 	}
 
 	protected function entryParser(PersistentObject $entry){
 
 		$entry->changeA("Anrede", Util::formatAnrede("de_DE", $entry, true));
+		$entry->changeA("Anrede2", Util::formatAnrede("de_DE", $entry, false));
 
 		if(isset($this->Kategorien[$entry->A("Kategorie")]))
 			$entry->changeA("Kategorie", $this->Kategorien[$entry->A("Kategorie")]);
@@ -77,6 +117,8 @@ class exportAdressenGUI extends exportDefault implements iExport, iGUIHTML2 {
 		$A = $entry->getA();
 		unset($A->AdresseID);
 		unset($A->anrede);
+		unset($A->nachname);
+		unset($A->vorname);
 	}
 }
 ?>

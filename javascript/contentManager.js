@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 
 var lastLoadedLeft        = -1;
@@ -112,7 +112,7 @@ var contentManager = {
 		$('contentLeft').update();
 		//if (document.cookie == "") document.cookie = "CookieTest = Erfolgreich"
 		if (!navigator.cookieEnabled) alert("In Ihrem Browser sind Cookies deaktiviert.\nBitte aktivieren Sie Cookies, damit diese Anwendung funktioniert.");
-		DesktopLink.init();
+		//DesktopLink.init();
 		
 		if($j.jStorage.get('phynxHideNavigation', false))
 			$j('#navigation').hide();
@@ -246,7 +246,7 @@ var contentManager = {
 		
 		contentManager.loadFrame(targetFrame, targetPlugin, -1, page, bps, function(){
 			if(typeof withId != "undefined" && withId != null){
-				contentManager.loadFrame("contentLeft", !options.single ? targetPlugin.substr(1) : options.single, withId);
+				contentManager.loadFrame("contentLeft", (typeof options != "undefined" && options.single) ? options.single : targetPlugin.substr(1), withId);
 				return;
 			}
 			
@@ -388,8 +388,8 @@ var contentManager = {
 		}
 	},
 
-	rightSelection: function(isMultiSelection, selectPlugin, callingPlugin, callingPluginID, callingPluginFunction){
-		contentManager.loadFrame('contentRight', selectPlugin, -1, 0, selectPlugin+'GUI;selectionMode:'+(isMultiSelection ? "multi" : "single")+'Selection,'+callingPlugin+','+callingPluginID+','+callingPluginFunction+','+lastLoadedRightPlugin);
+	rightSelection: function(isMultiSelection, selectPlugin, callingPlugin, callingPluginID, callingPluginFunction, addBPS){
+		contentManager.loadFrame('contentRight', selectPlugin, -1, 0, selectPlugin+'GUI;selectionMode:'+(isMultiSelection ? "multi" : "single")+'Selection,'+callingPlugin+','+callingPluginID+','+callingPluginFunction+','+lastLoadedRightPlugin+(addBPS ? ";"+addBPS : ""));
 		/*loadFrameV2(
 			'contentRight',
 			pluginRight,
@@ -669,6 +669,12 @@ var contentManager = {
 			var check = checkResponse(transport);
 			if(!responseCheck || check) {
 				
+				if(transport.responseText.charAt(0) == "{" && transport.responseText.charAt(transport.responseText.length - 1) == "}")
+					transport.responseData = jQuery.parseJSON(transport.responseText);
+				
+				if(transport.responseText.charAt(0) == "[" && transport.responseText.charAt(transport.responseText.length - 1) == "]")
+					transport.responseData = jQuery.parseJSON(transport.responseText);
+				
 				if(typeof onSuccessFunction == "string")
 					eval(onSuccessFunction);
 
@@ -762,7 +768,7 @@ var contentManager = {
 
 		if(mode == "hide")
 			for (var f = 0; f < fields.length; f++) {
-				var fieldS = $j(formID+'select[name='+fields[f]+'],'+formID+'input[name='+fields[f]+'],'+formID+'textarea[name='+fields[f]+']').parent().parent();
+				var fieldS = $j(formID+'select[name='+fields[f]+'],'+formID+'input[name='+fields[f]+'],'+formID+'textarea[name='+fields[f]+'],'+formID+'span[name='+fields[f]+']').parent().parent();
 				fieldS.css("display", "none");
 				if(fieldS.prev().hasClass("FormSeparatorWithLabel") || fieldS.prev().hasClass("FormSeparatorWithoutLabel"))
 					fieldS.prev().css("display", "none");
@@ -770,7 +776,7 @@ var contentManager = {
 
 		if(mode == "show")
 			for (var f = 0; f < fields.length; f++) {
-				var fieldS = $j(formID+'select[name='+fields[f]+'],'+formID+'input[name='+fields[f]+'],'+formID+'textarea[name='+fields[f]+']').parent().parent();
+				var fieldS = $j(formID+'select[name='+fields[f]+'],'+formID+'input[name='+fields[f]+'],'+formID+'textarea[name='+fields[f]+'],'+formID+'span[name='+fields[f]+']').parent().parent();
 				fieldS.css("display", "");
 				
 				if(fieldS.prev().hasClass("FormSeparatorWithLabel") || fieldS.prev().hasClass("FormSeparatorWithoutLabel"))
@@ -861,6 +867,10 @@ var contentManager = {
 			minutes = "0"+minutes;
 		
 		$j('#'+timeInput2ID).val(hour+":"+minutes);
+	},
+	
+	tinyMCEAddImage: function(src){
+		tinymce.activeEditor.selection.setContent('<img src="'+src+'">');
 	}
 	/*,
 	tinyMCEFileBrowser: function(field_name, url, type, win) {

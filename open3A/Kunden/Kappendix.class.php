@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class Kappendix extends PersistentObject {
 	public function __construct($id){
@@ -37,6 +37,10 @@ class Kappendix extends PersistentObject {
 		if($this->customizer != null)
 			$this->customizer->customizeNewAttributes($this->getClearClass(get_class($this)), $A);
 
+		if(Session::isPluginLoaded("mArtikelRG")){
+			$A->KappendixRabattgruppe = mUserdata::getUDValueS("DefaultValueKappendixKappendixRabattgruppe", 0);
+		}
+		
 		return $A;
 	}
 
@@ -72,7 +76,7 @@ class Kappendix extends PersistentObject {
 		return parent::newMe($checkUserData, $output);
 	}
 
-	// <editor-fold defaultstate="collapsed" desc="getAdresseToKundennummer">
+	// <editor-fold defaultstate="collapsed" desc="getAdresseIDToKundennummer">
 	public static function getAdresseIDToKundennummer($kundennummer){
 		$ac = new anyC();
 		$ac->setCollectionOf("Kappendix");
@@ -85,7 +89,7 @@ class Kappendix extends PersistentObject {
 		return $E->A("AdresseID");
 	}
 	// </editor-fold>
-
+	
 	// <editor-fold defaultstate="collapsed" desc="getKappendixToAdresse">
 	public static function getKappendixToAdresse($AdresseID){
 		$ac = anyC::get("Kappendix");

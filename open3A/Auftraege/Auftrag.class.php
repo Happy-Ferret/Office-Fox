@@ -15,9 +15,9 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
-class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable, iRepeatable, iDesktopLink {
+class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable, iRepeatable {#, iDesktopLink {
 
 	function  __construct($ID) {
 		parent::__construct($ID);
@@ -51,16 +51,22 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	}
 	// </editor-fold>
 
+	private static $lastNewAttributes = null;
 	// <editor-fold defaultstate="collapsed" desc="newWithDefaultValues">
-	function newWithDefaultValues($AdresseID = null, $status = null){
-		$this->A = $this->newAttributes();
+	function newWithDefaultValues($AdresseID = null, $status = null, Stammdaten $S = null, $AdresseNiederlassungID = 0){
+		if(self::$lastNewAttributes == null)
+			self::$lastNewAttributes = $this->newAttributes();
+		
+		$this->A = self::$lastNewAttributes;
 		$this->A->UserID = Session::currentUser()->getID();
+		$this->A->AuftragAdresseNiederlassungID = $AdresseNiederlassungID;
 		$this->A->auftragDatum = time();
 		if($status != null)
 			$this->A->status = $status;
 		
 		if(Session::isPluginLoaded("mStammdaten")){
-			$S = mStammdaten::getActiveStammdaten();
+			if($S == null)
+				$S = mStammdaten::getActiveStammdaten();
 			$this->A->AuftragVorlage = $S->A("ownTemplate");
 			$this->A->AuftragStammdatenID = $S->getID();
 		}
@@ -88,13 +94,13 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 		
 	}
 	
-	public static function getBelegArten($existsType = null, $addB = false){
+	public static function getBelegArten($existsType = null, $addB = false, $forApp = null){
 		$belege = array("A");
 		if($addB)
 			$belege[] = "B";
 		
 		
-		if(Applications::activeApplication() == "upFab"){
+		if(($forApp == null OR $forApp == "upFab") AND Applications::activeApplication() == "upFab"){
 			$belege = array("L");
 			
 			if($existsType != null)
@@ -103,8 +109,17 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 			return $belege;
 		}
 		
+		if(($forApp == null OR $forApp == "multiPOS") AND Applications::activeApplication() == "multiPOS"){
+			$belege = array("C");
+			
+			if($existsType != null)
+				return array_search($existsType, $belege) !== false;
 		
-		if(Applications::activeApplication() == "lightCRM"){
+			return $belege;
+		}
+		
+		
+		if(($forApp == null OR $forApp == "lightCRM") AND Applications::activeApplication() == "lightCRM"){
 			if($existsType != null)
 				return array_search($existsType, $belege) !== false;
 		
@@ -266,6 +281,11 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	function printLetter($GRLBMID, $copy, $die = true){
 		$brief = $this->getLetter("Print", $copy == "true" ? true : false, $GRLBMID);
 
+		$G = new GRLBM($GRLBMID, false);
+		$G->changeA("isPrinted".($copy == "true" ? "Copy" : ""), "1");
+		$G->changeA("isPrinted".($copy == "true" ? "Copy" : "")."Time", time());
+		$G->saveMe();
+			
 		try {
 			$drucker = mDrucker::getStandardPrinter($copy == "true" ? true : false);
 		} catch (NoStandardPrinterInstalledException $e){
@@ -283,7 +303,7 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	// </editor-fold>
 
 	// <editor-fold defaultstate="collapsed" desc="signLetter">
-	function signLetter($GRLBMID, $Recipient = "", $Subject = "", $Body = "", $die = true){
+	function signLetter($GRLBMID, $Recipient = "", $Subject = "", $Body = "", $die = true, $otherRecipient = ""){
 		$G = new GRLBM($GRLBMID);#$_SESSION["BPS"]->getProperty("Brief","GRLBMID"));
 		if($G->A("GRLBM1xEMail") != null AND $G->A("GRLBM1xEMail")){
 			$altEMailAddress = $G->A("GRLBM1xEMail");
@@ -299,9 +319,13 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 
 		if($Recipient != "") $AnAdresse->changeA("email", $Recipient);
 		if($altEMailAddress != "") $AnAdresse->changeA("email", $altEMailAddress);
+		if($otherRecipient != "") $AnAdresse->changeA("email", $otherRecipient);
 
-		if($_SESSION["S"]->checkForPlugin("SP")) $PL = new SPGUI();
-		if(isset($_SESSION["viaInterface"]) OR $_SESSION["S"]->checkForPlugin("PL")) $PL = new PLGUI();
+		if($_SESSION["S"]->checkForPlugin("SP"))
+			$PL = new SPGUI();
+		
+		if(isset($_SESSION["viaInterface"]) OR $_SESSION["S"]->checkForPlugin("PL"))
+			$PL = new PLGUI();
 
 		return $PL->sign($GRLBMID, $filename, $AnAdresse, $Subject, $Body, $die);
 	}
@@ -410,7 +434,15 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	function getLetter($target, $copy = false, $GRLBMID = null){		
 		$this->loadMe();
 		$brief = new Brief($target);
-		$brief->setStammdaten($this->A("AuftragStammdatenID") == "0" ? Stammdaten::getActiveStammdaten() : new Stammdaten($this->A("AuftragStammdatenID")));
+		
+		$G = new GRLBMGUI($GRLBMID);
+		
+		$Stammdaten = new Stammdaten($this->A("AuftragStammdatenID"));
+		
+		if($this->A("AuftragStammdatenID") == "0" OR $G->getMyPrefix() == "M")
+			$Stammdaten = Stammdaten::getActiveStammdaten();
+		
+		$brief->setStammdaten($Stammdaten);
 		/*
 		#$Gid = null;
 		$_SESSION["BPS"]->setActualClass("GRLBMGUI");
@@ -431,7 +463,6 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 
 		#if($GRLBMID == null) die(Util::getBasicHTMLError ("Es wurde keine GRLBMID übergeben!", "open3A Fehler"));#.die("Fehler, keine GRLBMID!!");
 		
-		$G = new GRLBMGUI($GRLBMID);
 		$G->isCopy = $copy;
 		$brief->isCopy = $copy;
 		$brief->setGRLBM($G);
@@ -470,14 +501,21 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 		#$_SESSION["messages"]->addMessage("creating Adresse for Auftrag ".$this->ID." of Adresse $AdresseID");
 		$p = new Adresse($AdresseID);
 
+		if(Session::isPluginLoaded("Kunden")){
+			$K = Kappendix::getKappendixToAdresse($AdresseID);
+			if($K === null){
+				$Kunden = new Kunden();
+				$Kunden->createKundeToAdresse($AdresseID, false);
+			}
+		}
+		
 		$newAdresseID = $p->newFromAdresse($this->ID);	
 		$this->changeA("AdresseID", $newAdresseID);
 		$this->saveMe();
 		
 		try {
-			$mKApp = new mKappendix();
-			$mKApp->setAssocV3("AdresseID","=",$AdresseID);
-			$KApp = $mKApp->getNextEntry();
+			$KApp = Kappendix::getKappendixToAdresse($AdresseID);
+			
 			if($KApp != null) {
 				$this->forceReload();
 				$this->A->kundennummer = $KApp->A("kundennummer");
@@ -494,6 +532,19 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	}
 	// </editor-fold>
 
+	// <editor-fold defaultstate="collapsed" desc="use1xAdresse">
+	public function use1xAdresse($AdresseID){
+		$p = new Adresse($AdresseID);
+
+		$p->changeA("AuftragID", $this->getID());
+		$p->saveMe(true, false);
+		
+		$this->changeA("AdresseID", $AdresseID);
+		$this->changeA("kundennummer", -2);
+		$this->saveMe(true, false);
+	}
+	// </editor-fold>
+	
 	// <editor-fold defaultstate="collapsed" desc="getNextNumber">
 	public static function getNextNumber($type){
 		$startNumber = $re_nr = "".date("y")."001";
@@ -516,16 +567,16 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 
 	private static $reNrTemplate = null;
 	// <editor-fold defaultstate="collapsed" desc="createGRLBM">
-	public function createGRLBM($belegart, $returnID = false, $belegNummer = false, $referenz = "", $datum = null){
+	public function createGRLBM($belegart, $returnID = false, $belegNummer = false, $referenz = "", $datum = null, $additional = array()){
 		$type = $belegart;
 
 		$this->loadMe();
 		
 		if (!$belegNummer) {
 			if (self::$reNrTemplate == null) {
-				$reNrClass = mStammdaten::getReNrTemplate();
+				$reNrClass = mStammdaten::getReNrTemplate($this->A("AuftragStammdatenID") != "0" ? $this->A("AuftragStammdatenID") : null);
 				Timer::now("2", __FILE__, __LINE__);
-
+				
 				$c = self::$reNrTemplate = new $reNrClass(-1);
 			} else
 				$c = self::$reNrTemplate;
@@ -552,10 +603,16 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 		$GA->lieferDatum = Util::CLDateParser($datum);#date("d.m.Y");
 		$GA->GRLBMpayedVia = "transfer";
 		$GA->GRLBMReferenz = $referenz;
+		$GA->GRLBMSEPAMode = "OOFF";
 		
 		$GA->prefix = mStammdaten::getActiveStammdaten()->getPrefix($type);
 
-		if(Session::isPluginLoaded("Kunden"))
+		if(Session::currentUser() != null){
+			$GA->GRLBMCreatedByUsername = Session::currentUser()->A("name");
+			$GA->GRLBMCreatedByUserID = Session::currentUser()->getID();
+		}
+		
+		if(Session::isPluginLoaded("Kunden") OR Session::isPluginLoaded("mKappendix"))
 			$KA = Kappendix::getKappendixToKundennummer($this->A("kundennummer"));
 		else
 			$KA = null;
@@ -591,6 +648,17 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 
 			if(isset($GA->zahlungsziel) AND $KA->A("KappendixZahlungsziel") != null)
 				$GA->zahlungsziel = (time() + $KA->A("KappendixZahlungsziel") * 3600 * 24);
+			
+			$sepaData = new stdClass();
+			$sepaData->IBAN = $KA->A("KappendixIBAN");
+			$sepaData->BIC = $KA->A("KappendixSWIFTBIC");
+			$sepaData->MandateDate = $KA->A("KappendixIBANMandatDatum");
+			$sepaData->MandateID = $KA->A("KappendixIBANMandatReferenz") != "" ? $KA->A("KappendixIBANMandatReferenz") : substr($KA->A("kundennummer").str_replace(" ", "", $KA->A("KappendixIBAN")), 0, 34);
+			
+			$GA->GRLBMSEPAData = json_encode($sepaData);
+			
+			if($type == "L")
+				$GA->lieferAdresseID = $KA->A("KappendixLieferadresseAdresseID");
 		} else {
 
 			try {
@@ -615,8 +683,11 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 				$GA->zahlungsziel = (time() + 14 * 3600 * 24);
 		}
 		
-		if(Session::isPluginLoaded("mZahlungsart")){
+		if(Session::isPluginLoaded("mZahlungsart") AND $type == "R"){
 			$ZAD = Zahlungsart::getDefault();
+			if($KA != null AND $KA->A("KappendixRZahlungsart") != "")
+				$ZAD = $KA->A("KappendixRZahlungsart");
+			
 			if($ZAD != ""){
 				$GA->GRLBMpayedVia = $ZAD;
 				$TBD = Zahlungsart::getTB($ZAD);
@@ -641,11 +712,16 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 			$GA->GRLBMWaehrungFaktor = $Sprache->A("SpracheWaehrungFaktor");
 		}
 		
+		foreach($additional AS $k => $v)
+			$GA->$k = $v;
+		
 		$G->setA($GA);
 		
 		Aspect::joinPoint("newGRLBM", $this, __METHOD__, array($G));
 		
 		$newID = $G->newMe();
+		
+		Aspect::joinPoint("alterGRLBM", $this, __METHOD__, array($newID));
 		
 		$this->A->auftragDatum = time();
 
@@ -672,8 +748,14 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 		if($type == "R")
 			$newStatus = "billed";
 
+		if($type == "G")
+			$newStatus = "credited";
+
 		if($type == "declined")
 			$newStatus = "declined";
+
+		if($type == "RT")
+			$newStatus = "billedPartly";
 
 		if($newStatus != "")
 			$this->changeA("status", $newStatus);
@@ -726,22 +808,27 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	}
 	
 	// <editor-fold defaultstate="collapsed" desc="sendViaEmail">
-	function sendViaEmail($GRLBMID, $Recipient = "", $Subject = "", $Body = "", $die = true){
+	function sendViaEmail($GRLBMID, $Recipient = "", $Subject = "", $Body = "", $die = true, $attachments = "", $otherRecipient = ""){
 		$G = new GRLBM($GRLBMID);
-		$brief = $this->getLetter("", false, $GRLBMID);
 		
+		$brief = $this->getLetter("Email", false, $GRLBMID);
 		$filename = $brief->generate(true);
+		
 		$Stammdaten = mStammdaten::getActiveStammdaten();
 		$AnAdresse = new Adresse($this->A("AdresseID"));
 
-		if($Recipient == "")
+		if($Recipient == "" AND $otherRecipient == "")
 			$Recipient = $this->getSingleEMailRecipient($G, $AnAdresse, true, $die);
+		
+		if($otherRecipient != "")
+			$Recipient = $otherRecipient;
 		
 		list($OSubject, $OBody) = AuftragGUI::getEMailTBs($AnAdresse, $Stammdaten, $G, $die);
 
 		if($Subject == "") $Subject = $OSubject;
 		if($Body == "") $Body = $OBody;
 
+		
 		list($fromName, $from) = AuftragGUI::getEMailSender($Stammdaten, $die);
 		
 		try {
@@ -751,6 +838,12 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 			if($die) Red::errorD($e->getMessage());
 			else throw new Exception("E-Mail: ".$e->getMessage());
 		}
+		
+		$images = tinyMCEGUI::findImages($Body);
+		$Body = tinyMCEGUI::fixImages($Body);
+		
+		foreach($images AS $image)
+			$mail->addEmbeddedImage(new fileEmbeddedImage($image, "image/jpg"));
 		
 		if(mUserdata::getUDValueS("sendBelegViaEmailDSN", "false") == "true")
 			$mail->setDSN(true, true, true);
@@ -770,7 +863,40 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 	    		new Base64Encoding())
 	    );
 
+		$filenameInvoice = null;
+		if($G->getMyPrefix() == "M" AND mUserdata::getUDValueS("sendBelegViaEmailAttachInvoice", "false") == "true"){
+			$GRLBMOrig = new GRLBM($G->A("AuftragID"));
+			$AuftragOrig = new Auftrag($GRLBMOrig->A("AuftragID"));
+			
+			$briefInvoice = $AuftragOrig->getLetter("", true, $GRLBMOrig->getID());
+			$filenameInvoice = $briefInvoice->generate(true);
 		
+			$mail->addAttachment(
+				new fileAttachment(
+					$filenameInvoice,
+					'application/pdf',
+					new Base64Encoding())
+			);
+		}
+		
+		if(trim($attachments) != ""){
+			$attachments = str_replace("attach_", "", $attachments);
+			$attachments = str_replace("=on", "", $attachments);
+			$attachments = explode("&", $attachments);
+			
+			foreach($attachments AS $AGRLBMID){
+				$briefAttached = $this->getLetter("Email", false, $AGRLBMID);
+				$filenameAttached = $briefAttached->generate(true);
+
+				$mail->addAttachment(
+					new fileAttachment(
+						$filenameAttached,
+						'application/pdf',
+						new Base64Encoding())
+				);
+			}
+		
+		}
 		#$ud = new mUserdata();
     	if(Session::isPluginLoaded("mFile") AND mUserdata::getUDValueS("sendBelegViaEmailAttachments", "false") == "true"){
 			$D = new mDateiGUI();
@@ -792,6 +918,10 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 			}
     	}
 
+		if(Session::isPluginLoaded("mMicropayment"))
+			$Body = Micropayment::attach($mail, $Body);
+		
+		
 	    if(strpos($Body, "<p") !== false AND strpos($Body, "</p>") !== false) {
 			$mail->setHTML(Util::makeHTMLMail($Body));
 			$mail->setHTMLCharset("UTF-8");
@@ -811,9 +941,12 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 		$G->changeA("isEMailedTime", time());
 		$G->saveMe(true, false, true);
 		
+		if($filenameInvoice)
+			unlink($filenameInvoice);
 		unlink($filename);
 
-		if($die) echo "message:AuftraegeMessages.M001";
+		if($die)
+			echo "message:AuftraegeMessages.M001";
 
 		return true;
 	}
@@ -833,18 +966,51 @@ class Auftrag extends PersistentObject implements iReNr, iCloneable, iDeletable,
 
 	// <editor-fold defaultstate="collapsed" desc="saveMultiEditField">
 	protected function saveMultiEditField($field,$value){
-		if($this->A == null) $this->loadMe();
+		if($this->A == null)
+			$this->loadMe();
+		
 		$this->A->$field = $value;
+		
 		$this->saveMe();
 	}
 	// </editor-fold>
 
+	public function newMe($checkUserData = true, $output = false) {
+		
+		if($this->A("AuftragAdresseNiederlassungID") !== null AND $this->A("AuftragAdresseNiederlassungID") > 0){
+			$AN = new AdresseNiederlassung($this->A("AuftragAdresseNiederlassungID"));
+			
+			$this->changeA("AuftragAdresseNiederlassungData", $AN->getJSON());
+		}
+		
+		if($this->A("AuftragAdresseNiederlassungID") !== null AND $this->A("AuftragAdresseNiederlassungID") == 0)
+			$this->changeA("AuftragAdresseNiederlassungData", "");
+		
+		
+		return parent::newMe($checkUserData, $output);
+	}
+	
+	public function saveMe($checkUserData = true, $output = false) {
+		
+		if($this->A("AuftragAdresseNiederlassungID") !== null AND $this->A("AuftragAdresseNiederlassungID") > 0){
+			$AN = new AdresseNiederlassung($this->A("AuftragAdresseNiederlassungID"));
+			
+			$this->changeA("AuftragAdresseNiederlassungData", $AN->getJSON());
+		}
+		
+		if($this->A("AuftragAdresseNiederlassungID") !== null AND $this->A("AuftragAdresseNiederlassungID") == 0)
+			$this->changeA("AuftragAdresseNiederlassungData", "");
+		
+		
+		return parent::saveMe($checkUserData, $output);
+	}
+	
 	// <editor-fold defaultstate="collapsed" desc="getDesktopLink">
-	public function getDesktopLink(){
+	/*public function getDesktopLink(){
 		$Adresse = new Adresse($this->A("AdresseID"));
 
 		return array("edit",$Adresse->A("firma") == "" ? $Adresse->A("vorname")." ".$Adresse->A("nachname") : $Adresse->A("firma"));
-	}
+	}*/
 	// </editor-fold>
 }
 ?>

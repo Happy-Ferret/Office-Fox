@@ -15,9 +15,10 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * 
- *  2007 - 2014, Rainer Furtmeier - Rainer@Furtmeier.IT
+ *  2007 - 2016, Rainer Furtmeier - Rainer@Furtmeier.IT
  */
 class ArtikelGUI extends Artikel implements iGUIHTML2 {
+	private static $hasLieferant = false;
 	function getHTML($id){
 		$gui = new HTMLGUI();
 		$gui->translate($this->loadTranslation());
@@ -44,35 +45,51 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		$gui->setShowAttributes(array(
 			"name",
 			"gebinde",
-			"preis",
-			"mwst",
-			"mwStKategorieID",
-			"KategorieID",
-			"beschreibung",
 			"artikelnummer",
-			"bild",
-			"bemerkung",
-			"EK1",
-			"EK2",
-			"hideInReport",
+			#"keinLagerbestand",
+			"KategorieID",
+			"KategorieID2",
+			"beschreibung",
+			"preis",
 			"isBrutto",
-			"bruttopreis",
 			"aufschlagListenpreis",
 			"aufschlagGesamt",
+			"mwst",
+			"mwStKategorieID",
+			"EK1",
+			"EK2",
 			"LohngruppeID",
 			"Lohnminuten",
+			"bild",
+			"bemerkung",
+			"erloeskonto",
+			"hideInReport",
+			"bruttopreis",
 			"bildDateiName"));
 		
-		$gui->setType("isBrutto","hidden");
-		if(Session::isPluginLoaded("mBrutto") AND !Session::isPluginLoaded("mLohngruppe") AND !Session::isPluginLoaded("mMwSt")){
-			$gui->setType("isBrutto","checkbox");
-			$gui->setLabel("isBrutto","Bruttopreis?");
-			$gui->setFieldDescription("isBrutto","Ist der angegebene Preis ein Bruttopreis?");
-			$gui->setLabel("preis","Preis");
+		if(Session::isPluginLoaded("mDifferenzbesteuerung"))
+			$gui->insertAttribute ("after", "hideInReport", "differenzbesteuert");
+		
+		
+		if(Session::isPluginLoaded("mVersand")){
+			$gui->insertAttribute ("after", "bemerkung", "gewicht");
+			$gui->setParser("gewicht", "ArtikelGUI::parserGewicht");
 		}
-
+		
+		$gui->setType("isBrutto","hidden");
+		$gui->setLabel("isBrutto","Bruttopreis?");
+		$gui->setFieldDescription("isBrutto","Ist der angegebene Preis ein Bruttopreis?");
+		if(Session::isPluginLoaded("mBrutto") AND !Session::isPluginLoaded("mLohngruppe")){
+			$gui->setType("isBrutto","checkbox");
+			$gui->setLabel("preis","Preis");
+			$gui->activateFeature("addSaveDefaultButton", $this, "isBrutto");
+		}
+		
 		if(!Session::isPluginLoaded("ImportDatanorm"))
 			$gui->hideAttribute("rabattgruppe");
+		
+		if(!Session::isPluginLoaded("mexportLexware"))
+			$gui->hideAttribute("erloeskonto");
 
 		
 		$gui->setParser("artikelnummer", "ArtikelGUI::parserArtikelnummer");
@@ -80,7 +97,12 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		$gui->setObject($this);
 		$gui->setName($this->languageClass->getSingular());
 		
-		$gui->setParser("preis","ArtikelGUI::preisInputParser",array($this->texts["Rechner"]));
+		$gui->setLabel("erloeskonto", "Erlöskonto");
+		$gui->setLabel("KategorieID2", "Kategorie 2");
+		if($this->A("KategorieID2") == "0")
+			$gui->setLineStyle("KategorieID2", "display:none;");
+		
+		$gui->setParser("preis","ArtikelGUI::preisInputParser", array($this->A("preisModus")));
 		
 		if(!Session::isPluginLoaded("mMwSt")){
 			$kat = new Kategorien();
@@ -111,10 +133,13 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$gui->setLabel("mwStKategorieID", "MwSt-Satz");
 			
 			$gui->hideAttribute("mwst");
+			$gui->setFieldDescription("mwStKategorieID", "Diese Einträge verwalten Sie im <a style=\"color:grey;\" href=\"#\" onclick=\"contentManager.loadPlugin('contentRight', 'mMwSt'); return false;\" >MwSt-Plugin</a>.");
 		}
 		
+		$gui->setType("differenzbesteuert","checkbox");
 		$gui->setType("beschreibung","textarea");
 		$gui->setType("KategorieID","select");
+		$gui->setType("KategorieID2","select");
 		
 		if(!Session::isPluginLoaded("Provisionen"))
 			$gui->setType("EK2", "hidden");
@@ -125,13 +150,13 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		$gui->hideAttribute("ArtikelID");
 		$gui->hideAttribute("bildDateiName");
 	
-		$gui->insertSpaceAbove("hideInReport");
-		$gui->insertSpaceAbove("EK1");
-		$gui->insertSpaceAbove("beschreibung");
-		$gui->insertSpaceAbove("gebinde");
-		$gui->insertSpaceAbove("aufschlagListenpreis");
+		#$gui->insertSpaceAbove("hideInReport");
+		$gui->insertSpaceAbove("EK1", "Einkauf");
+		$gui->insertSpaceAbove("bemerkung", "Sonstiges");
+		$gui->insertSpaceAbove("preis", "Verkauf");
+		#$gui->insertSpaceAbove("aufschlagListenpreis");
 		
-		$gui->setFieldDescription("KategorieID", "Diese Einträge verwalten Sie im <a href=\"#\" onclick=\"contentManager.loadPlugin('contentRight', 'Kategorien', 'KategorienGUI;-');return false;\" >Kategorien-Plugin</a>.");
+		$gui->setFieldDescription("KategorieID", "Diese Einträge verwalten Sie im <a style=\"color:grey;\" href=\"#\" onclick=\"contentManager.loadPlugin('contentRight', 'Kategorien');return false;\" >Kategorien-Plugin</a>.");
 		
 		if(Session::isPluginLoaded("Berichte"))
 			$gui->setType("hideInReport","checkbox");
@@ -147,6 +172,7 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$gui->setType("LohngruppeID","select");
 			$gui->selectWithCollection("LohngruppeID", anyC::get("Lohngruppe"), "LohngruppeName", "bitte auswählen");
 			$gui->setType("Lohnminuten","text");
+			$gui->insertSpaceAbove("LohngruppeID", "Lohn");
 		}
 
 		if(Session::isPluginLoaded("mMultiLanguage")){
@@ -164,25 +190,36 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		$values = $kat->getArrayWithValues();
 		$values[] = $this->texts["bitte auswählen"];
 		
-		$gui->setOptions("KategorieID",$keys,$values);
+		$gui->setOptions("KategorieID", $keys, $values);
+		$gui->setOptions("KategorieID2", $keys, $values);
 
-		/*if(Session::isPluginLoaded("mexportDatev") AND mUserdata::getGlobalSettingValue("DVKappendixKundenKonto", "0")){
-			$gui->insertSpaceAbove("sachkonto");
-			$BE = new Button("Als Standardkonto speichern", "./images/i2/save.gif", "icon");
-			$BE->rmePCR("Artikel", $this->getID(), "saveDefaultSachkonto", array("$('AjaxForm').sachkonto.value"));
-			
-			$gui->activateFeature("addCustomButton", $this, "sachkonto", $BE);
-		} else*/
+		
+		$B = new Button("Weitere Kategorie", "./images/i2/add.png", "icon");
+		$B->onclick("contentManager.toggleFormFields('show', ['KategorieID2']);");
+		$gui->activateFeature("addCustomButton", $this, "KategorieID", $B);
+		
 		$gui->setType("sachkonto", "hidden"); //Legacy since 24.02.2013
 		
 		$ST = new HTMLSideTable("right");
-		$ST->setTableStyle("float:right;margin: 0 -170px 0 0;width: 160px;");
-		if(Session::isPluginLoaded("mDArtikel")){
+		
+		$ST->addRow($this->getPic());
+		if($this->A("bildDateiName") == "")
+			$ST->addCellStyle (1, "display:none;");
+		$ST->addCellID(1, "ArtikelBild");
+		
+		
+		#$ST->setTableStyle("float:right;margin: 0 -170px 0 0;width: 160px;");
+		if(Session::isPluginLoaded("mDArtikel"))
 			$ST->addRow(DArtikel::getButton($this->getID()));
-		}
-
+		
 		if(Session::isPluginLoaded("mArtikelRG"))
 			$ST->addRow(ArtikelRG::getButton($this->getID()));
+		
+		if(Session::isPluginLoaded("mPostenKalkulation"))
+			$ST->addRow(PostenKalkulation::getButton($this->getID()));
+		
+		if(Session::isPluginLoaded("mPreisgruppe"))
+			$ST->addRow(Preisgruppe::getButton("Artikel", $this->getID()));
 			
 		if(Session::isPluginLoaded("mEtikette"))
 			$ST->addRow(Etikette::getButton("Artikel", $this->getID()));
@@ -190,12 +227,8 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		if(Session::isPluginLoaded("mLager"))
 			$ST->addRow(Lagerbestand::getButton($this->getID()));
 		
-		#if(Session::isPluginLoaded("mVermietet"))
-		#	$ST->addRow(Vermietet::getButton($this));
-		
 		if(Session::isPluginLoaded("mFile"))
-			$ST->addRow(mFileGUI::getManagerButton("Artikel", $this->getID(), false, "bildDateiName"));
-		
+			$ST->addRow(mFileGUI::getManagerButton("Artikel", $this->getID(), false, "bildDateiName", OnEvent::rme($this, "getPic", "1", "function(t){ if(t.responseText != '') \$j('#ArtikelBild').html(t.responseText).css('display', ''); else \$j('#ArtikelBild').html(t.responseText).css('display', 'none'); }")));
 		
 		if(Session::isPluginLoaded("mStueckliste")/* AND !Applications::isAppLoaded("openWaWi")*/)
 			$ST->addRow(Stueckliste::getButton($this->getID()));
@@ -210,9 +243,11 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$ST->addRow(Lieferant::getButton($this->getID()));
 
 			if(Lieferant::hasArtikelLieferant($this->getID())){
+				self::$hasLieferant = true;
+				
 				$gui->setType("EK1", "hidden");
 				$gui->setType("EK2", "hidden");
-				$gui->setType("preis", "hidden");
+				#$gui->setType("preis", "hidden");
 				
 				$gui->setLabel("aufschlagGesamt", "Aufschlag");
 				$gui->setType("aufschlagGesamt","text");
@@ -221,11 +256,32 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 				$gui->setLabel("aufschlagListenpreis", "Aufschlag");
 				$gui->setType("aufschlagListenpreis","text");
 				$gui->setFieldDescription("aufschlagListenpreis", "auf Listenpreis in Prozent");
+				
+				#contentManager.toggleFormFieldsTest(\$j(this).val() == '0', ['aufschlagGesamt', 'aufschlagListenpreis'], []);
+				if($this->A("preisModus") == "1"){
+					$gui->setLineStyle("aufschlagGesamt", "display:none;");
+					$gui->setLineStyle("aufschlagListenpreis", "display:none;");
+				}
 			}
 		}
 		
+		if(Session::isPluginLoaded("mProduktion") AND Applications::activeApplication() == "upFab")
+			$ST->addRow(Produktion::getButton($this->getID()));
+		
+		if(Session::isPluginLoaded("mProduktion") AND Applications::activeApplication() != "upFab")
+			$ST->addRow(Produktion::getInfo($this->getID()));
+		
+		if(mUserdata::getPluginSpecificData("Provisionen", "pluginSpecificHideEK"))
+			$gui->setType("EK2", "hidden");
+		
+		if(mUserdata::getPluginSpecificData("Provisionen", "pluginSpecificHideEK1"))
+			$gui->setType("EK1", "hidden");
+		
+		
 		if(Session::isPluginLoaded("mVermietet"))
 			$ST->addRow(Vermietet::getButton("Artikel", $this->getID()));
+		
+		Aspect::joinPoint("buttons", $this, __METHOD__, array($ST));
 		
 		$ST->addRow(array("&nbsp;"));
 		
@@ -238,6 +294,12 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 
 		return $ST.$updateJS.$gui->getEditHTML()/*.($_SESSION["S"]->checkForPlugin("mFile") ? "<div style=\"margin-top:20px;\">".$D->getHTML(-1, 0)."</div>" : "")*/;
 	}
+	
+	public static function parserGewicht($w, $l, $E){
+		$I = new HTMLInput("gewicht", "text", $w);
+		
+		return $I."<span style=\"color:grey;\"> kg</span>";
+	}
 
 	public static function parserArtikelnummer($w){
 		$I = new HTMLInput("artikelnummer", "text", $w);
@@ -248,6 +310,13 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 
 
 	public function getCalcTable($echo = "0"){
+		$hideEK = false;
+		if(mUserdata::getPluginSpecificData("Provisionen", "pluginSpecificHideEK"))
+			$hideEK = true;
+		
+		if(mUserdata::getPluginSpecificData("Provisionen", "pluginSpecificHideEK1"))
+			$hideEK = true;
+		
 		$CT = new HTMLTable(2);
 		$CT->setColClass(1, "");
 		$CT->setColClass(2, "");
@@ -280,6 +349,12 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		$CT->addCellStyle(1, "border-top-style:double;");
 		$CT->addCellStyle(2, "border-top-style:double;");
 		
+		if($hideEK){
+			$CT = new HTMLTable(2);
+			$CT->setColClass(1, "");
+			$CT->setColClass(2, "");
+			$CT->addColStyle(2, "text-align:right;");
+		}
 			
 			
 		$CT->addRow(array("&nbsp;"));
@@ -293,7 +368,7 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$CT->addRow(array("<b>Listenpreis:</b>", Util::CLNumberParserZ($listenpreis)));
 		
 		$aufschlagListenpreis = $this->getAufschlagListenpreis();
-		if($aufschlagListenpreis != 0)
+		if($aufschlagListenpreis != 0 AND $this->A("preisModus") == "0")
 			$CT->addRow(array("<b>Aufschlag:</b><br /><small>".$this->A("aufschlagListenpreis")."%</small>", Util::CLNumberParserZ($aufschlagListenpreis)));
 		
 		
@@ -302,7 +377,7 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$CT->addRow(array("<b>Lohn:</b>", Util::CLNumberParserZ($Lohn)));
 		
 		$aufschlagGesamt = $this->getAufschlagGesamt();
-		if($aufschlagGesamt != 0)
+		if($aufschlagGesamt != 0 AND $this->A("preisModus") == "0")
 			$CT->addRow(array("<b>Aufschlag:</b><br /><small>".$this->A("aufschlagGesamt")."%</small>", Util::CLNumberParserZ($aufschlagGesamt)));
 		
 		
@@ -319,7 +394,8 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 			$CT->addCellStyle(2, "border-top-style:double;");
 		#}
 		
-		$CT->addRow(array("<b>Gewinn:</b>", Util::CLNumberParserZ($nettoVK - $nettoEK)));
+		if(!$hideEK)
+			$CT->addRow(array("<b>Gewinn:</b>", Util::CLNumberParserZ($nettoVK - $nettoEK)));
 
 		if(!Session::isPluginLoaded("mMwSt"))
 			$CT->addRow(array("<b>Brutto:</b>", Util::CLNumberParserZ($this->getGesamtBruttoVK())));
@@ -331,17 +407,37 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 	}
 	
 	public static function preisInputParser($w, $l, $p){
-		return "<img src=\"./images/i2/calc.png\" onclick=\"rme('Artikel','-1','calcBruttoPreis',Array($('preis').value, $('mwst').value),'$(\'preis\').value = transport.responseText;');\" style=\"float:right;\" class=\"mouseoverFade\" title=\"".$p."\" /><input type=\"text\" value=\"$w\" id=\"preis\" style=\"width: 85%;\" name=\"preis\" onblur=\"blurMe(this);\" onfocus=\"focusMe(this);\"/>";
+		$B = new Button("Brutto- in Nettopreis umrechnen", "./images/i2/calc.png", "icon");
+		#$B->rmePCR("Artikel", "-1", "calcBruttoPreis", array("\$j('input[name=preis]').val()", "\$j('select[name=mwst]').val()"), "function(transport){ $('preis').value = transport.responseText; }");
+		$B->style("float:right;");
+		$B->contextMenu("Calculator", "input[name=preis]", "Rechner", "right", "down");
+		if(Session::isPluginLoaded("mMwSt"))
+			$B = "";
+		
+		$I = new HTMLInput("preis", "text", $w);
+		if(self::$hasLieferant AND $p == "0"){
+			$I->isDisabled(true);
+		}
+		
+		$IM = "";
+		if(self::$hasLieferant){
+			$I->style("width:40%;");
+			
+			$IM = new HTMLInput("preisModus", "select", $p, array("0" => "Nach Lieferant", "1" => "Festpreis"));
+			$IM->style("width:45%;margin-left:5%;");
+			$IM->onchange("contentManager.toggleFormFieldsTest(\$j(this).val() == '0', ['aufschlagGesamt', 'aufschlagListenpreis'], ['isBrutto']); if(\$j(this).val() == '1') { \$j('input[name=preis]').prop('disabled', ''); } else { \$j('input[name=preis]').prop('disabled', 'disabled'); }");
+		}
+		
+		return "$B$I$IM";
 	}
 
 	public function calcBruttoPreis($preis, $mwst){
-		$p = Util::parseFloat($_SESSION["S"]->getUserLanguage(), $preis);
-		#$m = Util::parseFloat($_SESSION["S"]->getUserLanguage(), $mwst);
+		$preis = Util::CLNumberParserZ($preis, "store");
+		$mwst = Util::CLNumberParserZ($mwst, "store");
 
-		$netto = $p / (100 + $mwst) * 100;
+		$netto = $preis / (100 + $mwst) * 100;
 
 		echo Util::CLFormatNumber($netto, 3);
-		#echo Util::formatCurrency($_SESSION["S"]->getUserLanguage(), $netto, false);
 	}
 	
 	public function addFile($id){
@@ -375,6 +471,24 @@ class ArtikelGUI extends Artikel implements iGUIHTML2 {
 		
 		$this->changeA($fieldName, $value);
 		$this->saveMe(true, true);
+	}
+	
+	public function getPic($echo = false){
+		if($this->A("bildDateiName") == "")
+			return "";
+		
+		$data = file_get_contents($this->A("bildDateiName"));
+		
+		$Image = "<img style=\"max-width:150px;\" src=\"data:image/".Util::ext($this->A("bildDateiName")).";base64,".base64_encode($data)."\">";
+		
+		if($echo)
+			echo $Image;
+		
+		return $Image;
+	}
+	
+	public function ACLabel(){
+		return $this->A("name");
 	}
 }
 ?>
